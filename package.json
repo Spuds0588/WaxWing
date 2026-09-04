@@ -12,7 +12,8 @@
     "test": "bun test tests/unit",
     "test:unit": "bun test tests/unit",
     "test:e2e": "bun run build && bunx playwright test",
-    "og:gen": "node scripts/gen-og.mjs"
+    "og:gen": "node scripts/gen-og.mjs",
+    "favicon:gen": "node scripts/gen-favicon.mjs"
   },
   "dependencies": {
     "peerjs": "^1.5.5"

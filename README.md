@@ -11,9 +11,9 @@ recorder — with **zero backend infrastructure**.
 
 The UI is a minimalist dark theme keyed to the cedar waxwing: warm charcoal
 backgrounds, cream plumage strokes, waxwing-yellow accents and waxy-tip red for
-recording states. The brand mark (`public/waxwing-logo.svg`) is a hand-drawn
-line logo of the bird — crest, black eye mask with white underline, short beak,
-grey wing with red waxy tips, yellow belly and tail band, on a perch.
+recording states. The brand mark is the waxwing illustration recolored to cream
+plumage (`public/waxwing-mark.svg`), used inline across the header, home page
+and modal, and as the favicon / home-screen icon.
 
 **Chromium desktop (Chrome, Edge, Brave) is required for full functionality.**
 Safari/Firefox can join as guests but degrade to in-memory recording, and the
@@ -50,10 +50,13 @@ suite on every push and pull request.
 ## How it works
 
 ### Roles come from the URL
-- **Host** — open the app with no parameters. You get a 6-letter room code and
-  your browser becomes the hub.
-- **Guest** — open `…?room=CODE` (the invite link the host copies). You connect
-  straight to the host's browser over WebRTC. No accounts, no installs.
+- **Host** — open the app with no parameters. You land on a selling home page;
+  hit **Start your studio** to open the preflight, and you get a 6-letter room
+  code — your browser becomes the hub. The invite link is your recording
+  session; share it to bring guests on stage.
+- **Guest** — open `…?room=CODE` (the invite link the host copies). You land
+  straight on the join screen and connect to the host's browser over WebRTC.
+  No accounts, no installs.
 
 ### Mobile guests (supported)
 Guests can join from a phone in any modern browser:

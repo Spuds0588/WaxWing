@@ -104,11 +104,39 @@ const inviteUrl = () =>
 
 // ---- boot ----------------------------------------------------------------
 
+let hostStarted = false;
+
 function boot() {
   const params = new URLSearchParams(location.search);
   S.room = (params.get("room") || "").toUpperCase().trim() || null;
   S.role = S.room ? "guest" : "host";
 
+  if (S.role === "guest") {
+    // Guests land straight on the preflight modal (body.mode-app set in HTML).
+    document.body.classList.add("guest-mode");
+    bootStudio();
+    return;
+  }
+
+  // Hosts land on the selling home page. The studio (and with it the camera
+  // probe) only boots once they start a studio — no permissions before intent.
+  for (const btn of document.querySelectorAll("[data-start]")) {
+    btn.addEventListener("click", startHostStudio);
+  }
+}
+
+function startHostStudio() {
+  if (hostStarted) return;
+  hostStarted = true;
+  document.body.classList.remove("mode-home");
+  document.body.classList.add("mode-app");
+  bootStudio();
+  // Still inside the user gesture: focusing is safe on iOS too.
+  els.nameInput?.focus();
+  if (els.nameInput?.value) els.nameInput.select();
+}
+
+function bootStudio() {
   // Mobile guests get a leaner shell (no sidebar, floating controls).
   if (S.role === "guest") document.body.classList.add("guest-mode");
 
@@ -1220,4 +1248,6 @@ function showFatal(title, message) {
 
 // ---- go ----------------------------------------------------------------
 
-document.addEventListener("DOMContentLoaded", boot);
+// Module scripts run before DOMContentLoaded, but the callbacks registered
+// below only touch elements that already exist (script sits at end of body).
+boot();

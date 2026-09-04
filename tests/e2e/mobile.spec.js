@@ -72,10 +72,30 @@ test("join attempt without camera permission fails gracefully on mobile", async 
   await expect(page.locator("#welcomeModal")).toContainText(ROOM);
 });
 
-test("host shell on a phone still fits (sidebar hidden)", async ({ page }) => {
+test("host funnels from the selling home page into a fitting studio shell", async ({ page }) => {
   await page.goto("/"); // no ?room => host
+
+  // The home page sells first — and fits the phone with no overflow.
+  await expect(page.locator("body")).toHaveClass(/mode-home/);
+  await expect(page.locator("#landing")).toBeVisible();
+  await expect(page.locator("#welcomeModal")).toBeHidden();
+  await expect(page.locator(".land-hero")).toContainText("Your browser is the studio");
+  await expectNoOverflow(page);
+
+  // The primary CTA hands you your first recording-link flow.
+  await page.locator("#landing .land-hero [data-start]").click();
+  await expect(page.locator("body")).toHaveClass(/mode-app/);
+  await expect(page.locator("#landing")).toBeHidden();
   await expect(page.locator("#welcomeModal")).toBeVisible();
   await expectNoOverflow(page);
+
+  // The preflight modal still fits the viewport after the mode switch.
+  const modal = await page.locator("#welcomeModal .modal").boundingBox();
+  const { width, height } = page.viewportSize();
+  expect(modal.x).toBeGreaterThanOrEqual(0);
+  expect(modal.y).toBeGreaterThanOrEqual(0);
+  expect(modal.x + modal.width).toBeLessThanOrEqual(width + 1);
+  expect(modal.height).toBeLessThanOrEqual(height + 1);
 
   // Sidebar is desktop-only and must not participate in mobile layout.
   const sidebarVisible = await page.locator("#sidebar").isVisible();
