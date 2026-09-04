@@ -115,6 +115,22 @@ const inviteUrl = () =>
 
 let hostStarted = false;
 
+// The selling page's demo stage is a fixed 640×360 component that is scaled
+// to its column with transform: scale(). Keeping the authored size constant
+// means its internal layout (tiles, chips, invite bar) can never reflow or
+// collide as the column shrinks — the wrapper below it carries the visible
+// footprint via aspect-ratio, and the scaled child is clipped inside it.
+const HS_WIDTH = 640;
+function fitHeroStage() {
+  const wrap = document.querySelector(".hero-stage-wrap");
+  if (!wrap) return;
+  // Border-box width so the scaled 640px stage fills the wrapper exactly
+  // (clientWidth excludes the wrapper's own borders, which leaves a 1px gap).
+  const w = wrap.getBoundingClientRect().width;
+  if (!w) return; // landing hidden (mode-app) or display:none
+  wrap.style.setProperty("--hs-scale", String(Math.min(1, w / HS_WIDTH)));
+}
+
 function boot() {
   const params = new URLSearchParams(location.search);
   S.room = (params.get("room") || "").toUpperCase().trim() || null;
@@ -132,6 +148,8 @@ function boot() {
   for (const btn of document.querySelectorAll("[data-start]")) {
     btn.addEventListener("click", startHostStudio);
   }
+  fitHeroStage();
+  window.addEventListener("resize", fitHeroStage);
 }
 
 function startHostStudio() {

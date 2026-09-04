@@ -211,9 +211,14 @@ Vite is only a dev server / static bundler):
 MIT © Corey Burns
 
 The **WaxWing bird mark** is adapted from a waxwing line-art illustration
-sourced via [SVG Repo](https://www.svgrepo.com/) (the source asset carries
-its own license, typically CC0 / public-domain dedication or CC-BY per its
-listing there). WaxWing recolors the artwork to the theme's cream plumage and
-re-frames it for the logo, favicon and social card; the original illustration
-was not created by this project. See `public/waxwing-mark.svg` for the
-adapted vector.
+sourced via [SVG Repo](https://www.svgrepo.com/). The source file's own
+comment (preserved in `public/waxwing-mark.svg` and the inline sprite in
+`index.html`) reads:
+
+> Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools
+
+WaxWing recolors the artwork to the theme's cream plumage and re-frames it
+for the logo, favicon and social card; the original illustration was not
+created by this project. SVG Repo assets carry the license stated on their
+individual listing — follow that listing's terms for any reuse of the
+original. See `public/waxwing-mark.svg` for the adapted vector.
