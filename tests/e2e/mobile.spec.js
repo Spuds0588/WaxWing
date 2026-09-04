@@ -11,12 +11,21 @@ import { expect, test } from "@playwright/test";
 const ROOM = "MOBILE1";
 
 async function expectNoOverflow(page) {
-  const dims = await page.evaluate(() => ({
-    x: document.documentElement.scrollWidth - window.innerWidth,
-    y: document.documentElement.scrollHeight - window.innerHeight,
-  }));
+  const dims = await page.evaluate(() => {
+    // The selling home page scrolls inside #landing (fixed, overflow-y auto),
+    // so its own scrollWidth is the real check — a grid blowout there used to
+    // push the hero 4px past the viewport while <html> reported no overflow.
+    const land = document.getElementById("landing");
+    const landX = land ? land.scrollWidth - land.clientWidth : 0;
+    return {
+      x: document.documentElement.scrollWidth - window.innerWidth,
+      y: document.documentElement.scrollHeight - window.innerHeight,
+      landX,
+    };
+  });
   expect(dims.x, `horizontal overflow by ${dims.x}px`).toBeLessThanOrEqual(1);
   expect(dims.y, `vertical overflow by ${dims.y}px`).toBeLessThanOrEqual(1);
+  expect(dims.landX, `landing scroller overflow by ${dims.landX}px`).toBeLessThanOrEqual(1);
 }
 
 test("guest preflight modal fits the viewport", async ({ page }) => {

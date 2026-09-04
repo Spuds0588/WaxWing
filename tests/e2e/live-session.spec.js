@@ -68,12 +68,18 @@ const CLAMP_GUM = `(() => {
 })();`;
 
 async function expectNoOverflow(page) {
-  const dims = await page.evaluate(() => ({
-    x: document.documentElement.scrollWidth - window.innerWidth,
-    y: document.documentElement.scrollHeight - window.innerHeight,
-  }));
+  const dims = await page.evaluate(() => {
+    const land = document.getElementById("landing");
+    const landX = land ? land.scrollWidth - land.clientWidth : 0;
+    return {
+      x: document.documentElement.scrollWidth - window.innerWidth,
+      y: document.documentElement.scrollHeight - window.innerHeight,
+      landX,
+    };
+  });
   expect(dims.x, `horizontal overflow by ${dims.x}px`).toBeLessThanOrEqual(1);
   expect(dims.y, `vertical overflow by ${dims.y}px`).toBeLessThanOrEqual(1);
+  expect(dims.landX, `landing scroller overflow by ${dims.landX}px`).toBeLessThanOrEqual(1);
 }
 
 async function expectWithinViewport(page, locator) {

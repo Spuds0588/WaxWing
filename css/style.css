@@ -1413,7 +1413,10 @@ body.mode-app .modal-backdrop {
   margin: 0 auto;
   padding: clamp(40px, 7vw, 84px) 24px 40px;
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
+  /* minmax(0, …) stops the fr tracks from blowing out to free-space+gap:
+     on phones the single column used to resolve 28px wider than the hero's
+     content box, pushing the whole copy column past the viewport edge. */
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: clamp(28px, 5vw, 64px);
   align-items: center;
 }
@@ -1818,7 +1821,7 @@ body.mode-app .modal-backdrop {
 
 @media (max-width: 980px) {
   .land-hero {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .hero-copy {
     max-width: 640px;
@@ -1838,6 +1841,8 @@ body.mode-app .modal-backdrop {
   .land-nav {
     padding-top: 11px;
     padding-bottom: 11px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
   }
   .feat-grid,
   .steps {
@@ -1850,10 +1855,13 @@ body.mode-app .modal-backdrop {
     width: 100%;
     justify-content: center;
   }
+  /* One consistent gutter across the whole page on phones. */
+  .land-hero,
   .land-band,
   .land-steps,
   .land-cta,
-  .land-faq {
+  .land-faq,
+  .land-foot {
     padding-left: 16px;
     padding-right: 16px;
   }
