@@ -69,7 +69,7 @@ export class Stage {
 
   // ---- participant lifecycle -------------------------------------------
 
-  addParticipant({ key, label, isSelf = false }) {
+  addParticipant({ key, label, isSelf = false, hasVideo = true, hasAudio = true }) {
     if (this.entries.has(key)) {
       this.entries.get(key).label = label;
       this.syncDom();
@@ -89,13 +89,28 @@ export class Stage {
     const grip = el("div", { class: "tile-grip", title: "Drag to resize" });
     if (!isSelf) tag.append(el("span", { class: "tile-role chip-guest", text: "GUEST" }));
     tile.append(video, tag, handle, grip);
+    // Listeners / no-camera joins: no video element content to show — render
+    // a name-tile placeholder instead of a black box labeled "connecting…".
+    if (!hasVideo) {
+      tile.classList.add("tile-novideo");
+      const initials = String(label || "?").trim().slice(0, 2).toUpperCase() || "?";
+      const sub = !hasAudio ? (hasVideo ? "Camera only" : "No camera or mic") : "Voice only";
+      const ph = el(
+        "div",
+        { class: "tile-ph" },
+        el("span", { class: "tile-ph-avatar", text: initials }),
+        el("span", { class: "tile-ph-sub", text: sub }),
+      );
+      tile.append(ph);
+      video.style.display = "none";
+    }
     tile.addEventListener("dblclick", () => {
       if (!this.interactive) return;
       this.custom.delete(key);
       this.syncDom();
     });
     this.container.append(tile);
-    this.entries.set(key, { key, label, isSelf, tileEl: tile, videoEl: video, tagEl: tag });
+    this.entries.set(key, { key, label, isSelf, hasVideo, hasAudio, tileEl: tile, videoEl: video, tagEl: tag });
     this.order.push(key);
     if (this.interactive) this.wireTileInteractions(tile, key);
     this.syncDom();
@@ -272,14 +287,45 @@ export class Stage {
       this.ctx.save();
       this.ctx.clip();
 
-      const ready = v && v.readyState >= 2 && v.videoWidth > 0;
+      const noVideo = entry && entry.hasVideo === false;
+      const ready = v && !noVideo && v.readyState >= 2 && v.videoWidth > 0;
       if (ready) {
         const { dx, dy, dw, dh } = coverCrop(pw, ph, v.videoWidth, v.videoHeight);
         this.ctx.drawImage(v, px + dx, py + dy, dw, dh);
       } else {
         this.ctx.fillStyle = "#11141d";
         this.ctx.fillRect(px, py, pw, ph);
-        if (v && v.readyState < 2) {
+        if (noVideo) {
+          // A voice-only / listener tile: initials + a note, never the
+          // misleading "connecting…" that belongs to a slow video feed.
+          const label = r.label || "?";
+          const initials = String(label).trim().slice(0, 2).toUpperCase() || "?";
+          const avatarR = Math.min(pw, ph) * 0.16;
+          this.ctx.fillStyle = entry?.hasAudio
+            ? "rgba(255,198,61,0.16)"
+            : "rgba(255,255,255,0.07)";
+          this.ctx.beginPath();
+          this.ctx.arc(px + pw / 2, py + ph * 0.44, avatarR, 0, Math.PI * 2);
+          this.ctx.fill();
+          this.ctx.strokeStyle = entry?.hasAudio
+            ? "rgba(255,198,61,0.4)"
+            : "rgba(255,255,255,0.18)";
+          this.ctx.lineWidth = 1.5;
+          this.ctx.stroke();
+          this.ctx.fillStyle = entry?.hasAudio ? "#ffc63d" : "#8a8371";
+          this.ctx.font = `700 ${avatarR * 0.9}px system-ui, sans-serif`;
+          this.ctx.textAlign = "center";
+          this.ctx.textBaseline = "middle";
+          this.ctx.fillText(initials, px + pw / 2, py + ph * 0.44 + 1);
+          const note = !entry?.hasAudio
+            ? "No camera or mic"
+            : r.isSelf
+              ? "Voice only (camera off)"
+              : "Voice only";
+          this.ctx.font = `600 ${Math.max(12, ph * 0.045)}px system-ui, sans-serif`;
+          this.ctx.fillStyle = "rgba(255,255,255,0.5)";
+          this.ctx.fillText(note, px + pw / 2, py + ph * 0.44 + avatarR + Math.max(16, ph * 0.05));
+        } else if (v && v.readyState < 2) {
           this.ctx.fillStyle = "rgba(255,255,255,0.35)";
           this.ctx.font = `${Math.max(14, pw * 0.05)}px ui-monospace, monospace`;
           this.ctx.textAlign = "center";

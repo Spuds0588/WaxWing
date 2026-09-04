@@ -1893,3 +1893,207 @@ body.mode-app .modal-backdrop {
     bottom: 14px;
   }
 }
+
+/* ======================================================================
+   Preflight join toggles (camera / mic / save-master switches)
+   ====================================================================== */
+
+.join-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+}
+.join-toggles.rec-toggles {
+  background: transparent;
+  border-color: rgba(255, 198, 61, 0.16);
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  min-height: 26px;
+  user-select: none;
+}
+.switch-row.switch-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.switch-ico {
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+.switch-row:has(.switch-input:checked) .switch-ico {
+  color: var(--accent);
+}
+.switch-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.switch-state {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  min-width: 24px;
+  text-align: right;
+}
+.switch-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.switch-ui {
+  flex: 0 0 auto;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #2a2c38;
+  border: 1px solid #3a3d4d;
+  transition: background 0.16s, border-color 0.16s;
+}
+.switch-ui::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #cfd2dd;
+  transition: transform 0.16s ease, background 0.16s;
+}
+.switch-input:checked + .switch-ui {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch-input:checked + .switch-ui::after {
+  transform: translateX(16px);
+  background: var(--accent-ink);
+}
+.switch-input:checked ~ .switch-state {
+  color: var(--accent);
+}
+.save-hint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* Voice-only / listener tiles on the host's stage */
+.tile-ph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  z-index: 1;
+  pointer-events: none;
+}
+.tile-ph-avatar {
+  width: min(42%, 92px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: min(18px, 2.2vw);
+  color: var(--accent);
+  background: rgba(255, 198, 61, 0.1);
+  border: 1px solid rgba(255, 198, 61, 0.38);
+  box-shadow: 0 14px 34px -14px rgba(0, 0, 0, 0.75);
+}
+.tile-ph-sub {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.tile-novideo {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 198, 61, 0.05), transparent 70%),
+    #0d0f16;
+}
+
+/* ======================================================================
+   Studio topbar on portrait phones: controls stop fighting for one line
+   ====================================================================== */
+
+/* The full-screen affordance belongs to the stage area, not the header: it
+   used to be positioned against a fixed header height, which overlaps the
+   two-row phone header. Anchoring it to .stage-shell keeps it below the
+   topbar no matter how many rows the header wraps into (and it stays
+   visible in fullscreen, since it lives inside the fullscreened node). */
+.fs-btn {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  #topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    row-gap: 6px;
+  }
+  .brand {
+    order: 0;
+    min-height: 36px;
+  }
+  #hostControls {
+    order: 1;
+    margin-left: auto;
+    min-height: 36px;
+  }
+  .room-cluster {
+    order: 2;
+    flex: 1 0 100%;
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+    min-height: 34px;
+  }
+  #hostControls .btn {
+    min-height: 36px;
+    padding: 8px 13px;
+    font-size: 13px;
+  }
+  .btn-icon {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .room-code {
+    min-height: 34px;
+  }
+}
+
+/* Small phones: let the status pill shrink instead of shoving the code. */
+@media (max-width: 420px) and (orientation: portrait) {
+  #connPill {
+    max-width: 30vw;
+  }
+  .room-cluster .pill {
+    padding: 4px 9px;
+  }
+  .switch-ui {
+    width: 34px;
+  }
+  .switch-input:checked + .switch-ui::after {
+    transform: translateX(12px);
+  }
+}

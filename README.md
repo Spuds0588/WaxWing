@@ -69,13 +69,25 @@ suite on every push and pull request.
 
 ## How it works
 
-### Preflight camera preview
-Before you commit to joining, the welcome modal opens a **live, muted camera
-preview** so you can see yourself and your framing first — picking a different
-camera in the dropdown restarts the preview instantly. It runs at a low
-640×480 so it's cheap, and it's stopped the moment you enter the studio (the
-real capture then opens at full resolution). If the camera can't start (no
-permission yet, no camera), the box says so and joining still works.
+### Preflight: what you join with
+Before you commit to joining, the welcome modal asks how you want to appear:
+
+- **Camera / Microphone switches** — turn either (or both) off. A guest with
+  the camera off but the mic on joins as a **voice-only** tile (initials, mic
+  live); with everything off they're a **listener**: they watch the stage and
+  hear the show but send no media and record nothing. The host's stage and
+  the broadcast guests see render a clean name tile for them — never a black
+  "connecting…" box.
+- **Camera preview** — when the camera is on, a live, muted 640×480 preview
+  runs in the modal so you can check your framing before committing; picking
+  a different camera restarts it instantly, and it stops the moment you enter
+  the studio (the real capture then opens at full resolution).
+- **Save my local master** — each participant decides independently whether a
+  local master exists for them. Off means you stay live on the show but
+  nothing is recorded, stored or sent on your side. There's nothing to save
+  when both camera and mic are off, so the switch locks itself off.
+
+Choices are remembered per browser.
 
 ### Roles come from the URL
 - **Host** — open the app with no parameters. You land on a selling home page;
@@ -93,6 +105,9 @@ Guests can join from a phone in any modern browser:
   seen — tap **“Tap to hear the show”** once to unlock audio, and the
   **full-screen** button fills the screen. A nudge suggests rotating to
   landscape for the biggest stage.
+- **Join without a camera or mic** — phones with no permission, a broken
+  camera, or users who'd rather just listen turn the switches off and join
+  anyway as voice-only or listener tiles.
 - **Local guest recording** works on Android Chrome (kept in memory on the
   phone, then synced to the host). iOS Safari can't mux video with
   `MediaRecorder`, so those guests join live but don't record locally — the
@@ -132,11 +147,20 @@ the Director's Cut source when Region Capture isn't available.
 ### Audio
 A Web Audio mixer on the host builds one bus per guest containing every mic
 **except that guest's**, so nobody hears their own voice echoed back over the
-network. The host monitors only remote voices.
+network, and the host's speakers carry only **remote** voices — your own mic
+is never routed back to your own output (unit-tested in
+`mixAssignments`). The graph is torn down and rebuilt on every join/leave so
+repeated rebuilds can't stack duplicate connections into the monitor path
+and accumulate into feedback. Guests who join mic-less simply don't exist in
+the mix, and listeners add nothing at all.
 
 ### Recording controls
-- **Record** (host): every participant records their own local master
-  simultaneously. Guests need no click — the host's broadcast starts them.
+- **Record** (host): starts the show. Every participant who opted in at
+  preflight records their own local master simultaneously — guests need no
+  click, the host's broadcast cues them. Participants who switched saving off
+  stay live with nothing stored (the host's sidebar row and the status chip
+  say so honestly), and each guest's file still streams back to the host
+  when the show stops.
 - **Stage** (host): the Director's Cut. Uses Region Capture
   (`CropTarget.fromElement` + `track.cropTo`) to record exactly the stage at
   1080p; falls back to the composer canvas.
@@ -167,6 +191,11 @@ Vite is only a dev server / static bundler):
 
 ## Roadmap
 
+- **Session templates** *(planned, next)* — saved stage presets per show:
+  auto-layouts tuned for phone/mobile guests, a logo or watermark slot
+  between tiles, PNG/SVG backgrounds and gradients behind the stage, and
+  theme variations of the name tags and chips. Customization here matters as
+  much as stability and recording fidelity.
 - **Agentic studio sessions via WebMCP** *(planned)* — expose WaxWing's actions
   as [WebMCP](https://zuplo.com/blog/what-is-webmcp) tools (the W3C-proposed
   **Web Model Context Protocol** for browser-native agent tools) so an AI agent
@@ -177,6 +206,14 @@ Vite is only a dev server / static bundler):
 - **Direct-to-platform streaming** (WHIP/RTMP bridge) and **cloud sync**
   (Drive/OneDrive) per the original PRD's V2/V3 scope.
 
-## License
+## License & icon attribution
 
 MIT © Corey Burns
+
+The **WaxWing bird mark** is adapted from a waxwing line-art illustration
+sourced via [SVG Repo](https://www.svgrepo.com/) (the source asset carries
+its own license, typically CC0 / public-domain dedication or CC-BY per its
+listing there). WaxWing recolors the artwork to the theme's cream plumage and
+re-frames it for the logo, favicon and social card; the original illustration
+was not created by this project. See `public/waxwing-mark.svg` for the
+adapted vector.

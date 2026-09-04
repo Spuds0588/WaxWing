@@ -179,3 +179,145 @@ test("host + guest session screens fit the phone end to end", async ({ browser }
     await guestCtx.close().catch(() => {});
   }
 });
+
+// Flip a hidden switch input the way a user would (it's visually hidden, so
+// Playwright can't click it directly) and fire the same change handler.
+async function flipSwitch(page, id, on) {
+  await page.locator(`#${id}`).evaluate((el, checked) => {
+    el.checked = checked;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }, on);
+}
+
+async function newSessionContexts(browser, cb) {
+  const { viewport, userAgent, isMobile, hasTouch, deviceScaleFactor } =
+    test.info().project.use;
+  const hostCtx = await browser.newContext({
+    viewport, userAgent, isMobile, hasTouch, deviceScaleFactor,
+  });
+  const guestCtx = await browser.newContext({
+    viewport, userAgent, isMobile, hasTouch, deviceScaleFactor,
+  });
+  for (const ctx of [hostCtx, guestCtx]) {
+    await ctx.addInitScript((sig) => {
+      window.__WW_PEER__ = sig;
+    }, SIG);
+    await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
+    await ctx.addInitScript(CLAMP_GUM);
+  }
+  try {
+    await cb(hostCtx, guestCtx);
+  } finally {
+    await hostCtx.close().catch(() => {});
+    await guestCtx.close().catch(() => {});
+  }
+}
+
+test("guest joins with camera and mic off and stays a clean listener", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const errors = [];
+  await newSessionContexts(browser, async (hostCtx, guestCtx) => {
+    const host = await hostCtx.newPage();
+    const guest = await guestCtx.newPage();
+    for (const p of [host, guest]) {
+      p.on("pageerror", (e) => errors.push(String(e)));
+      p.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+    }
+
+    await host.goto("/");
+    await host.locator("#landing .land-hero [data-start]").click();
+    await host.fill("#nameInput", "Phone Host");
+    await host.click("#btnEnter");
+    await expect(host.locator("#welcomeModal")).toBeHidden();
+    const room = (await host.locator("#roomChipCode").textContent()).trim();
+
+    // Guest switches BOTH camera and mic off. The save toggle must realize
+    // there is nothing to record and disable itself.
+    await guest.goto(`/?room=${room}`);
+    await guest.fill("#nameInput", "Listen Only");
+    await flipSwitch(guest, "optVideo", false);
+    await flipSwitch(guest, "optMic", false);
+    await expect(guest.locator("#optSave")).toBeDisabled();
+    await expect(guest.locator("#optSave")).not.toBeChecked();
+    await guest.click("#btnEnter");
+    await expect(guest.locator("#welcomeModal")).toBeHidden();
+
+    // The host sees the listener arrive as a name tile (never a black box).
+    await expect(host.locator("#guestCountBadge")).toContainText("1/3", { timeout: 30_000 });
+    await expect(host.locator("#guestList .guest-name")).toContainText("Listen Only");
+    await expect(host.locator("#guestList .guest-row .guest-state")).toHaveText("Listening");
+    await expect(host.locator(".tile-novideo")).toHaveCount(1);
+    await expect(host.locator(".tile-ph-sub")).toHaveText("No camera or mic");
+
+    // The listener still receives the live stage (they came to watch).
+    await expect(guest.locator("#connPill")).toContainText("On air", { timeout: 20_000 });
+    await expect(guest.locator("#guestSelf")).toBeHidden();
+
+    // A record run starts and stops cleanly: the host records its own master,
+    // the listener acked "nothing to record", no sync row hangs forever.
+    await host.click("#btnRecord");
+    await expect(host.locator("#recChip")).toBeVisible();
+    await host.waitForTimeout(2000);
+    await host.click("#btnRecord");
+    await expect(host.locator("#recChip")).toBeHidden({ timeout: 30_000 });
+    await expect(host.locator("#syncModal")).toBeHidden();
+    await expectNoOverflow(host);
+    await expectNoOverflow(guest);
+  });
+  expect(errors, `JS errors during session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
+});
+
+test("host can direct with local saving off while guests still record and sync", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const errors = [];
+  await newSessionContexts(browser, async (hostCtx, guestCtx) => {
+    const host = await hostCtx.newPage();
+    const guest = await guestCtx.newPage();
+    for (const p of [host, guest]) {
+      p.on("pageerror", (e) => errors.push(String(e)));
+      p.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+    }
+
+    // Host opts OUT of saving its own master (keeps camera + mic on).
+    await host.goto("/");
+    await host.locator("#landing .land-hero [data-start]").click();
+    await host.fill("#nameInput", "Director Only");
+    await flipSwitch(host, "optSave", false);
+    await expect(host.locator("#saveHint")).toContainText("no local master");
+    await host.click("#btnEnter");
+    await expect(host.locator("#welcomeModal")).toBeHidden();
+    const room = (await host.locator("#roomChipCode").textContent()).trim();
+
+    // Guest (default prefs: save ON) joins and records its own master.
+    await guest.goto(`/?room=${room}`);
+    await guest.fill("#nameInput", "Saving Guest");
+    await guest.click("#btnEnter");
+    await expect(guest.locator("#connPill")).toContainText("On air", { timeout: 30_000 });
+
+    // Record: the host runs the show without a local master of its own; the
+    // sidebar row says so honestly, and the chip reads "Guests recording".
+    await host.click("#btnRecord");
+    await expect(host.locator("#recChip")).toBeVisible();
+    await expect(host.locator("#recChipState")).toHaveText("Guests recording");
+    await expect(host.locator("#recRowSelf .rec-state")).toHaveText(
+      "Not saving — master recording is off",
+    );
+    await expect(guest.locator("#recChip")).toBeVisible({ timeout: 20_000 });
+    await host.waitForTimeout(2500);
+
+    // Stop: the guest's master still streams back and lands on the host.
+    await host.click("#btnRecord");
+    await expect(host.locator("#syncModal")).toBeVisible({ timeout: 20_000 });
+    await expect(host.locator("#syncList .sync-row.done").first()).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(host.locator("#btnSyncClose")).toBeEnabled();
+    await expectNoOverflow(host);
+    await expectNoOverflow(guest);
+  });
+  expect(errors, `JS errors during session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
+});

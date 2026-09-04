@@ -10,15 +10,24 @@ import { LOCAL_RECORD, STAGE } from "./config.js";
 import { fileStamp, safeName } from "./util.js";
 import { createRecordingSink } from "./fs.js";
 
-const CANDIDATES = [
+const VIDEO_CANDIDATES = [
   'video/webm;codecs="vp9,opus"',
   'video/webm;codecs="vp8,opus"',
   "video/webm",
 ];
+const AUDIO_CANDIDATES = [
+  'audio/webm;codecs="opus"',
+  "audio/webm",
+];
 
-export function pickMimeType() {
+// Pick the best supported mux. Pass the stream being recorded so an
+// audio-only master (a guest with the camera off but the mic on) doesn't
+// ask a video muxer to wrap a mic-only stream.
+export function pickMimeType(stream) {
   if (typeof MediaRecorder === "undefined") return null;
-  for (const mime of CANDIDATES) {
+  const hasVideo = stream?.getVideoTracks().length > 0;
+  const list = hasVideo === false && stream ? AUDIO_CANDIDATES : [...VIDEO_CANDIDATES, ...AUDIO_CANDIDATES];
+  for (const mime of list) {
     if (MediaRecorder.isTypeSupported(mime)) return mime;
   }
   return "";
@@ -43,7 +52,7 @@ export const cropSupported =
  * stop() -> Promise<{ blob, fileName, mode, dirName }>.
  */
 export async function startRecording({ stream, fileName, bitsPerSecond }) {
-  const mimeType = pickMimeType();
+  const mimeType = pickMimeType(stream);
   if (!recorderSupported || !mimeType) {
     throw new Error("MediaRecorder is not available in this browser.");
   }

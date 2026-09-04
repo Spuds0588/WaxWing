@@ -60,7 +60,8 @@ for (const id of [
   "syncModal", "syncTitle", "syncList", "syncNote", "btnSyncClose",
   "dontClosePill", "dontCloseText", "fatalPanel", "fatalTitle", "fatalMessage",
   "btnFatalReload", "composerCanvas", "stageShell", "btnFullscreen",
-  "orientHint",
+  "orientHint", "optVideo", "optMic", "optSave", "saveLabel", "saveHint",
+  "saveRow", "folderWrap", "recChipState",
 ]) {
   els[id] = $(`#${id}`);
 }
@@ -73,6 +74,12 @@ const S = {
   name: "",
   quality: "",
   entered: false,
+  // Join prefs (camera/mic toggles + the local-master save opt-in).
+  wantVideo: true,
+  wantAudio: true,
+  saveMaster: true,
+  hasMedia: false, // did we actually open any track?
+  showActive: false, // host: a broadcast run is live (guests recording)
   masterStream: null,
   previewStream: null,
   previewCam: "",
@@ -157,24 +164,56 @@ function bootStudio() {
   // Welcome copy per role.
   if (S.role === "guest") {
     els.roleBlurb.textContent =
-      `You're joining studio ${S.room}. You'll watch the host's stage live, while your ` +
-      `own camera records locally on your machine at full quality — nothing you record ` +
-      `travels over the internet until you choose to send it.`;
+      `You're joining studio ${S.room}. Watch the host's stage live and jump on it with ` +
+      `your camera and mic — both optional, so you can also join as a voice or ` +
+      `listen-only guest. Your local master only exists if you choose to save it.`;
     els.btnEnterLabel.textContent = "Join live studio";
+    els.saveLabel.textContent = "Record my master & send it to the host";
   } else {
     els.roleBlurb.textContent =
       "You're the host. Guests connect straight to your browser over WebRTC — no accounts, no servers. " +
       "Pick a name, choose your gear, and share the room code once you're on stage.";
     els.btnEnterLabel.textContent = "Enter the studio";
+    els.saveLabel.textContent = "Save my local master";
   }
+
+  // Restore the saved join prefs, then keep the toggles/selects coherent.
+  els.optVideo.checked = readPref(STORAGE_KEYS.optVideo, true);
+  els.optMic.checked = readPref(STORAGE_KEYS.optMic, true);
+  els.optSave.checked = readPref(STORAGE_KEYS.optSave, true);
+  syncMediaPrefs();
 
   renderCaps();
   els.recModeLabel.textContent = pickMimeType() || "unavailable";
+
+  // The folder picker is a Chromium-desktop-only API; hide it elsewhere and
+  // let the save hint carry the memory note instead.
+  els.folderWrap.classList.toggle("hidden", !fs.fsSupported);
 
   // Wire static UI.
   els.btnEnter.addEventListener("click", handleEnter);
   els.btnRefreshDevices.addEventListener("click", () => populateDeviceSelects().then(startCameraPreview));
   els.camSelect.addEventListener("change", startCameraPreview);
+  els.optVideo.addEventListener("change", () => {
+    syncMediaPrefs();
+    persistPrefs();
+    if (els.optVideo.checked) {
+      els.previewState.textContent = "Starting camera…";
+      startCameraPreview();
+    } else {
+      stopPreview();
+      els.previewState.textContent = "Camera off — the stage shows your name tile.";
+      els.previewState.classList.remove("hidden");
+    }
+  });
+  els.optMic.addEventListener("change", () => {
+    syncMediaPrefs();
+    persistPrefs();
+  });
+  els.optSave.addEventListener("change", () => {
+    syncMediaPrefs();
+    persistPrefs();
+  });
   els.btnFolder.addEventListener("click", async () => {
     const handle = await fs.chooseDefaultDir();
     if (handle) updateFolderLabel();
@@ -196,7 +235,7 @@ function bootStudio() {
   });
   window.addEventListener("devicechange", () => populateDeviceSelects(true).then(startCameraPreview));
   window.addEventListener("beforeunload", (e) => {
-    if (S.recActive || S.stageRecActive || (S.sync && !S.sync.done) || uploadInProgress) {
+    if (S.recActive || S.showActive || S.stageRecActive || (S.sync && !S.sync.done) || uploadInProgress) {
       e.preventDefault();
       e.returnValue = "";
     }
@@ -219,9 +258,12 @@ function bootStudio() {
     // iOS won't reveal device labels without a user gesture — probing here
     // would just throw a premature permission prompt, so populate bare lists.
     populateDeviceSelects().then(startCameraPreview);
-  } else {
+  } else if (S.wantVideo || S.wantAudio) {
+    // Warm the exact media the participant enabled (never ask for a camera
+    // the user switched off — that permission probe is the feedback trigger
+    // guests shouldn't hit when joining as voice/listen-only).
     navigator.mediaDevices
-      ?.getUserMedia({ audio: true, video: true })
+      ?.getUserMedia({ audio: S.wantAudio, video: S.wantVideo })
       .then(async (st) => {
         st.getTracks().forEach((t) => t.stop());
         await populateDeviceSelects();
@@ -231,9 +273,64 @@ function bootStudio() {
         await populateDeviceSelects();
         startCameraPreview();
       });
+  } else {
+    populateDeviceSelects().then(startCameraPreview);
   }
 
   updateFolderLabel();
+}
+
+// ---- join prefs (camera/mic toggles + local-master save) ------------------
+
+function readPref(key, dflt) {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? dflt : v !== "0";
+  } catch {
+    return dflt;
+  }
+}
+
+function persistPrefs() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.optVideo, els.optVideo.checked ? "1" : "0");
+    localStorage.setItem(STORAGE_KEYS.optMic, els.optMic.checked ? "1" : "0");
+    localStorage.setItem(STORAGE_KEYS.optSave, els.optSave.checked ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+}
+
+// Keep the selects, the save toggle and the hints in sync with the switches.
+function syncMediaPrefs() {
+  S.wantVideo = els.optVideo.checked;
+  S.wantAudio = els.optMic.checked;
+  els.camSelect.disabled = !S.wantVideo;
+  els.micSelect.disabled = !S.wantAudio;
+
+  const anyMedia = S.wantVideo || S.wantAudio;
+  const recordable = anyMedia && canRecordVideo();
+  els.optSave.disabled = !recordable;
+  els.saveRow.classList.toggle("switch-disabled", !recordable);
+  if (!recordable && els.optSave.checked) els.optSave.checked = false;
+  S.saveMaster = els.optSave.checked && recordable;
+
+  let hint;
+  if (!anyMedia) {
+    hint =
+      "No camera or mic — you can still join and watch the stage, but there is nothing to record.";
+  } else if (!canRecordVideo()) {
+    hint = "This browser can't record video locally — you'll still be live on the stage.";
+  } else if (S.role === "guest") {
+    hint = S.saveMaster
+      ? "Saved at full quality on your device, then streamed to the host when the show stops."
+      : "You'll be live on the stage, but nothing is stored or sent when the show records.";
+  } else {
+    hint = S.saveMaster
+      ? "Records your own camera at full quality when you press Record — you can pick the folder then."
+      : "You'll run the show, but keep no local master yourself.";
+  }
+  els.saveHint.textContent = hint;
 }
 
 // ---- camera preview (preflight, before you commit to entering) -----------
@@ -254,6 +351,7 @@ function stopPreview() {
 
 async function startCameraPreview() {
   if (!navigator.mediaDevices?.getUserMedia || S.entered) return;
+  if (!S.wantVideo) return; // camera toggled off — nothing to preview
   const camId = els.camSelect.value;
   // Already previewing this camera — don't restart (e.g. devicechange).
   if (S.previewCam === camId && S.previewStream) return;
@@ -377,21 +475,27 @@ async function handleEnter() {
     return;
   }
   els.welcomeError.classList.add("hidden");
+  syncMediaPrefs(); // toggles may have changed since the modal opened
+  persistPrefs();
   S.busy = true;
-  setEnterState("Starting cameras…", true);
+  setEnterState(S.wantVideo ? "Starting cameras…" : "Connecting…", true);
 
   try {
-    const camId = els.camSelect.value;
-    const micId = els.micSelect.value;
+    const camId = S.wantVideo ? els.camSelect.value : "";
+    const micId = S.wantAudio ? els.micSelect.value : "";
     const { stream, quality } = await openMasterStream({
       camId,
       micId,
+      wantVideo: S.wantVideo,
+      wantAudio: S.wantAudio,
       onAttempt: (ladder) => setEnterState(`Requesting ${ladder.label} camera…`, true),
     });
     rememberDeviceIds(camId, micId);
     S.masterStream = stream;
+    S.hasMedia = stream.getTracks().length > 0;
     S.quality = quality;
-    S.proxyVideoTrack = S.role === "guest" ? makeProxyVideoTrack(stream) : null;
+    S.proxyVideoTrack =
+      S.role === "guest" && S.wantVideo ? makeProxyVideoTrack(stream) : null;
 
     // The preflight preview served its purpose — drop it so the camera
     // light is off until the master ladder opens the real session stream.
@@ -410,8 +514,9 @@ async function handleEnter() {
     if (S.role === "host") await setupHost();
     else await setupGuest();
 
+    const cap = S.wantVideo ? quality : "no camera";
     els.qualityNote.textContent =
-      `Local capture ${quality} · P2P link 1280×720 · ${pickMimeType() || "webm"}`;
+      `Local capture ${cap} · P2P link 1280×720 · ${pickMimeType() || "webm"}`;
     if (S.role === "host") {
       els.capQualityLabel.textContent = quality;
       els.sidebar.classList.remove("hidden");
@@ -461,7 +566,13 @@ async function setupHost() {
     if (!S.stage) {
       S.stage = new Stage({ container: els.stage, canvas: els.composerCanvas });
       S.stage.initCanvas();
-      S.stage.addParticipant({ key: "self", label: S.name, isSelf: true });
+      S.stage.addParticipant({
+        key: "self",
+        label: S.name,
+        isSelf: true,
+        hasVideo: S.wantVideo,
+        hasAudio: S.wantAudio,
+      });
       S.stage.setStream("self", S.masterStream);
     }
 
@@ -601,13 +712,25 @@ function hostEvents(e) {
         S.net.rejectGuest(e.key, "show-full");
         break;
       }
-      S.stage.addParticipant({ key: e.key, label: e.name });
-      makeGuestRow(e.key, e.name);
+      const media = e.media || { video: true, audio: true };
+      S.stage.addParticipant({
+        key: e.key,
+        label: e.name,
+        hasVideo: media.video !== false,
+        hasAudio: media.audio !== false,
+      });
+      const row = makeGuestRow(e.key, e.name);
+      // Tell the host what this guest is actually bringing (or not).
+      if (media.video === false) {
+        row.querySelector(".guest-state").textContent =
+          media.audio === false ? "Listening" : "Voice only";
+      }
       S.bus.ensureGuestBus(e.key);
       setGuestCountUI();
       updateComposerNeed();
-      // Late joiners during a show start recording right away.
-      if (S.recActive) S.net.sendToGuest(e.key, { t: "rec-start", run: S.recRun });
+      // Late joiners during a show get the record cue right away (their own
+      // save opt-in decides whether that starts a recorder).
+      if (S.showActive) S.net.sendToGuest(e.key, { t: "rec-start", run: S.recRun });
       if (S.stageRecActive) S.net.sendToGuest(e.key, { t: "stage-rec-on" });
       break;
     }
@@ -759,9 +882,9 @@ function checkSyncComplete() {
 // ---- host: record controls ------------------------------------------------
 
 async function toggleRecord() {
-  if (S.busy) return;
-  if (S.recActive) await stopOwnRecording("host");
-  else await startOwnRecording("host");
+  if (S.busy || S.role !== "host") return;
+  if (S.showActive) await stopShow();
+  else await startShow();
 }
 
 async function ensureFolder() {
@@ -777,10 +900,17 @@ async function ensureFolder() {
   return false;
 }
 
-async function startOwnRecording(role, { run } = {}) {
+// The host's Record button drives the whole SHOW. Everyone who opted in at
+// preflight saves their own local master; everyone who opted out stays live
+// with nothing stored. The host's own recorder only runs when the host opted
+// in, but the run is always broadcast so guests that opted in record theirs.
+async function startShow() {
+  if (S.busy || S.showActive) return;
   S.busy = true;
+  S.recRun = String(Date.now());
+  const hostSaves = S.saveMaster && S.hasMedia;
   try {
-    if (role === "host") {
+    if (hostSaves) {
       if (fs.fsSupported) {
         if (!(await ensureFolder())) {
           notify("Recording cancelled — pick a folder first.", "danger");
@@ -791,14 +921,136 @@ async function startOwnRecording(role, { run } = {}) {
         // fall back to the PRD's in-memory Blob recording with a warning.
         notify("This browser can't write straight to disk — recording to memory. Keep shows short.", "warn");
       }
+      try { await S.bus?.start(); } catch { /* audio needs another gesture */ }
+      S.localRec = await startRecording({
+        stream: S.masterStream,
+        fileName: localFileName(S.name),
+        bitsPerSecond: LOCAL_RECORD.bitsPerSecond,
+      });
+      S.recActive = true;
+    } else {
+      els.recRowSelf.dataset.state = "idle";
+      els.recRowSelf.querySelector(".rec-state").textContent = S.hasMedia
+        ? "Not saving — master recording is off"
+        : "Nothing to record — no camera or mic";
     }
-    try {
-      await S.bus?.start();
-    } catch { /* audio needs another gesture; recording still works */ }
 
-    if (!run) S.recRun = String(Date.now());
-    else S.recRun = run;
-    if (role === "guest" && !fs.hasDir()) {
+    S.showActive = true;
+    S.recStartedAt = Date.now();
+    els.btnRecord.classList.add("on");
+    els.btnRecordLabel.textContent = "Stop";
+    els.recChipState.textContent = hostSaves ? "Recording" : "Guests recording";
+    els.recChip.classList.remove("hidden");
+    startRecTimers();
+    showDontClose(true);
+    updateComposerNeed();
+
+    if (S.net) {
+      S.recAcked = new Set(); // guests that can't/won't record ack early
+      S.lastBroadcastRun = S.recRun;
+      S.net.broadcast({ t: "rec-start", run: S.recRun });
+    }
+  } catch (err) {
+    // A failed recorder start rolls the whole run back (the broadcast above
+    // never fired, so guests were never told to record).
+    S.localRec = null;
+    S.recActive = false;
+    S.showActive = false;
+    stopRecTimers();
+    els.btnRecord.classList.remove("on");
+    els.btnRecordLabel.textContent = "Record";
+    els.recChip.classList.add("hidden");
+    els.recRowSelf.dataset.state = "idle";
+    els.recRowSelf.querySelector(".rec-state").textContent = "Idle";
+    updateComposerNeed();
+    showDontClose(false);
+    notify(`Couldn't start recording: ${err.message}`, "danger");
+  } finally {
+    S.busy = false;
+  }
+}
+
+async function stopShow() {
+  if (S.busy || !S.showActive) return;
+  S.busy = true;
+  const run = S.recRun;
+  const hostSaved = S.recActive;
+  try {
+    els.btnRecord.disabled = true;
+    els.btnRecordLabel.textContent = "Finishing…";
+
+    if (hostSaved && S.localRec) {
+      const res = await S.localRec.stop();
+      S.localRec = null;
+      S.recActive = false;
+      S.lastOwnRecording = { run, ...res };
+      els.recRowSelf.dataset.state = "done";
+      els.recRowSelf.querySelector(".rec-state").textContent = "Saved locally";
+      if (res.mode === "memory") {
+        notify("Recording kept in memory — downloading the copy now.", "warn");
+        downloadBlob(res.blob, res.fileName);
+      }
+    } else {
+      // The host ran the show without a local master — guests that opted in
+      // still recorded theirs and their files come back in the sync round.
+      els.recRowSelf.querySelector(".rec-state").textContent =
+        S.saveMaster && !S.hasMedia ? "Nothing to record" : "Not saving — master recording is off";
+    }
+
+    S.showActive = false;
+    stopRecTimers();
+    els.btnRecord.classList.remove("on");
+    els.btnRecordLabel.textContent = "Record";
+    els.btnRecord.disabled = false;
+    els.recChip.classList.add("hidden");
+    updateComposerNeed();
+
+    if (S.net && run) {
+      S.net.broadcast({ t: "rec-stop", run });
+      // Guests that already acked ("won't record") aren't waited on.
+      const guestKeys = [...S.net.guests.keys()].filter((k) => !S.recAcked?.has(k));
+      if (guestKeys.length) {
+        S.pendingRecAcks = new Set(guestKeys);
+        els.recRowSelf.querySelector(".rec-state").textContent = "Waiting for guests…";
+        await waitForGuestAcks();
+        await startSyncRound(run);
+      }
+    }
+    // Keep the tab-open reminder while a sync round is still streaming.
+    if (!S.sync || S.sync.done) showDontClose(false);
+    els.recRowSelf.querySelector(".rec-state").textContent =
+      hostSaved ? "Saved locally" : "Not saving — master recording is off";
+  } catch (err) {
+    // A failed finalize must still leave the controls usable and honest
+    // (e.g. a full disk or a sink write error at stop time).
+    S.showActive = false;
+    S.recActive = false;
+    S.localRec = null;
+    stopRecTimers();
+    els.btnRecord.disabled = false;
+    els.btnRecordLabel.textContent = "Record";
+    els.btnRecord.classList.remove("on");
+    els.recChip.classList.add("hidden");
+    els.recRowSelf.dataset.state = "idle";
+    els.recRowSelf.querySelector(".rec-state").textContent = "Stopped — not saved";
+    updateComposerNeed();
+    showDontClose(Boolean(S.stageRecActive) || (S.sync && !S.sync.done));
+    notify(`Recording had a problem: ${err.message}`, "danger");
+  } finally {
+    S.busy = false;
+  }
+}
+
+// Guest-side local master recorder, started by the host's rec-start cue.
+// Guests never broadcast; they just record and wait for the host to ask for
+// the file after the show stops.
+async function startOwnRecording(role, { run } = {}) {
+  S.busy = true;
+  try {
+    try { await S.bus?.start(); } catch { /* audio needs another gesture */ }
+    if (run) S.recRun = run;
+    else S.recRun = String(Date.now());
+    if (!fs.hasDir()) {
       notify(
         "No folder picked — this recording is held in memory. Fine for short shows.",
         "warn",
@@ -821,18 +1073,13 @@ async function startOwnRecording(role, { run } = {}) {
   S.recStartedAt = Date.now();
   els.btnRecord.classList.add("on");
   els.btnRecordLabel.textContent = "Stop";
+  els.recChipState.textContent = "Recording";
   els.recChip.classList.remove("hidden");
   els.recRowSelf.dataset.state = "recording";
   els.recRowSelf.querySelector(".rec-state").textContent = "Recording";
   startRecTimers();
   showDontClose(true);
   updateComposerNeed();
-
-  if (role === "host" && S.net) {
-    S.lastBroadcastRun = S.recRun;
-    S.recAcked = new Set(); // guests that already told us they can't record
-    S.net.broadcast({ t: "rec-start", run: S.recRun });
-  }
 }
 
 async function stopOwnRecording(role, opts = {}) {
@@ -856,43 +1103,20 @@ async function stopOwnRecording(role, opts = {}) {
 
     S.lastOwnRecording = { run, ...res };
 
-    if (role === "guest") {
-      // Tell the host it can ask for our file.
-      S.net?.sendToHost({
-        t: "rec-done",
-        run,
-        name: res.fileName,
-        size: res.blob.size,
-      });
-      if (res.mode === "memory") {
-        notify("Recording kept in memory — it will download after it's sent to the host.", "warn");
-      } else {
-        notify(`Your master saved to ${res.fileName} ✓`, "success");
-      }
-      showDontClose(false);
-      if (!uploadInProgress && !S.sync) return; // wait for the host to ask
-      return;
-    }
-
-    // Host role: broadcast stop, wait for guests to finish, then sync.
-    if (S.net && run) {
-      S.net.broadcast({ t: "rec-stop", run });
-      // Guests that already acked ("finished" or "can't record") aren't waited on.
-      const guestKeys = [...S.net.guests.keys()].filter((k) => !S.recAcked?.has(k));
-      if (guestKeys.length) {
-        S.pendingRecAcks = new Set(guestKeys);
-        els.recRowSelf.querySelector(".rec-state").textContent = "Waiting for guests…";
-        await waitForGuestAcks();
-        await startSyncRound(run);
-      }
-    }
+    // Tell the host it can ask for our file.
+    S.net?.sendToHost({
+      t: "rec-done",
+      run,
+      name: res.fileName,
+      size: res.blob.size,
+    });
     if (res.mode === "memory") {
-      notify("Recording kept in memory — downloading the copy now.", "warn");
-      downloadBlob(res.blob, res.fileName);
+      notify("Recording kept in memory — it will download after it's sent to the host.", "warn");
+    } else {
+      notify(`Your master saved to ${res.fileName} ✓`, "success");
     }
-    // Keep the tab-open reminder while a sync round is still streaming.
-    if (!S.sync || S.sync.done) showDontClose(false);
-    els.recRowSelf.querySelector(".rec-state").textContent = "Saved locally";
+    showDontClose(false);
+    if (!uploadInProgress && !S.sync) return; // wait for the host to ask
   } catch (err) {
     // A failed finalize must still leave the controls usable and honest
     // (e.g. a full disk or a sink write error at stop time).
@@ -906,7 +1130,7 @@ async function stopOwnRecording(role, opts = {}) {
     els.recRowSelf.dataset.state = "idle";
     els.recRowSelf.querySelector(".rec-state").textContent = "Stopped — not saved";
     updateComposerNeed();
-    showDontClose(Boolean(S.stageRecActive) || (S.sync && !S.sync.done));
+    showDontClose(false);
     notify(`Recording had a problem: ${err.message}`, "danger");
   } finally {
     S.busy = false;
@@ -1046,7 +1270,9 @@ function stopRecTimers() {
 }
 function updateRecTime() {
   els.recTime.textContent = fmtClock((Date.now() - S.recStartedAt) / 1000);
-  document.title = `● REC ${els.recTime.textContent} · WaxWing`;
+  // Only claim "REC" in the tab title when THIS device is recording (a host
+  // directing a show with saving off keeps the run timer but no local file).
+  if (S.recActive) document.title = `● REC ${els.recTime.textContent} · WaxWing`;
 }
 function startStageTimers() {
   updateStageTime();
@@ -1072,11 +1298,12 @@ function updateComposerNeed() {
 
 function showDontClose(show) {
   els.dontClosePill.classList.toggle("hidden", !show);
-  els.dontCloseText.textContent = S.recActive
-    ? "Recording — keep this tab open"
-    : S.stageRecActive
-      ? "Recording the stage — keep this tab open"
-      : "Syncing files — keep this tab open";
+  els.dontCloseText.textContent =
+    S.recActive || S.showActive
+      ? "Recording — keep this tab open"
+      : S.stageRecActive
+        ? "Recording the stage — keep this tab open"
+        : "Syncing files — keep this tab open";
   // Recording hides the rotate nudge — the pill owns the bottom strip.
   updateOrientHint();
 }
@@ -1088,9 +1315,13 @@ async function setupGuest() {
   els.roomChipCode.textContent = S.room;
   els.inviteCode.textContent = S.room;
 
-  // Self-view pip.
-  els.guestSelf.classList.remove("hidden");
-  els.guestSelfVideo.srcObject = S.masterStream;
+  // Self-view pip only exists when a camera is actually on.
+  if (S.wantVideo) {
+    els.guestSelf.classList.remove("hidden");
+    els.guestSelfVideo.srcObject = S.masterStream;
+  } else {
+    els.guestSelf.classList.add("hidden");
+  }
 
   // The stage video fills the 16:9 frame.
   const video = el("video", { class: "stage-video-fill", autoplay: "", playsinline: "" });
@@ -1099,11 +1330,15 @@ async function setupGuest() {
 
   setPill("busy", "Connecting to host…");
   S.net = new Network({ displayName: S.name, onEvent: guestEvents });
+  S.net.prefs = { video: S.wantVideo, audio: S.wantAudio, save: S.saveMaster };
   try {
     await S.net.join({ roomCode: S.room });
-    const outStream = S.proxyVideoTrack
-      ? new MediaStream([S.proxyVideoTrack, ...S.masterStream.getAudioTracks()])
-      : S.masterStream;
+    // Uplink = downscaled proxy video (if the camera is on) + mic (if on).
+    // A guest with everything off sends no media call — just the data
+    // channel — and appears on the host's stage as a name tile.
+    const outStream = new MediaStream();
+    if (S.proxyVideoTrack) outStream.addTrack(S.proxyVideoTrack);
+    for (const t of S.masterStream.getAudioTracks()) outStream.addTrack(t);
     S.net.dialHost(outStream);
   } catch (err) {
     if (err?.type === "peer-unavailable") {
@@ -1155,6 +1390,14 @@ function guestOnData(msg) {
     case "rec-start":
       if (S.recActive) break;
       S.recRun = msg.run;
+      // The host started a run — each guest decides for themselves whether
+      // a local master exists. Skip instantly (and tell the host so it
+      // stops waiting) when the guest opted out of saving, has no media to
+      // record, or is on a browser that can't mux video.
+      if (!S.saveMaster || !S.hasMedia) {
+        S.net?.sendToHost({ t: "rec-done", run: msg.run, name: "", size: 0 });
+        break;
+      }
       if (!canRecordVideo()) {
         // iOS Safari can't mux video with MediaRecorder. Stay live on the
         // stage and tell the host there's nothing to sync, so it doesn't
@@ -1276,31 +1519,30 @@ async function handleExit() {
   const role = S.role;
   const warning =
     role === "host"
-      ? S.recActive
-        ? "You're recording. End the show anyway? Guests' local files will be saved on their side."
+      ? S.showActive
+        ? "You're in a recording run. End the show anyway? Guests' own files are saved on their side."
         : "End the show? All guests will be disconnected."
-      : "Leave the studio?";
+      : S.recActive
+        ? "You're recording locally. Leave anyway? Your file is saved first."
+        : "Leave the studio?";
   if (!confirm(warning)) return;
 
-  if (S.recActive) {
-    if (role === "host") {
-      // Graceful: stop local, broadcast stop + sync quickly, then reload.
+  if (role === "host") {
+    if (S.showActive) {
+      // Graceful: guests hear "host ending", the run closes (their own
+      // recorders finalize their files), then this tab reloads.
       S.net?.broadcast({ t: "host-ending", run: S.recRun });
-      await stopOwnRecording("host");
+      await stopShow();
     } else {
-      if (S.recActive) {
-        // Don't abandon the local master on leave — finalize it so the file
-        // is saved (and the host is told) before this tab goes away.
-        await stopOwnRecording("guest", { silent: true });
-      } else {
-        S.net?.sendToHost({ t: "rec-done", run: S.recRun, name: "", size: 0 });
-      }
+      S.net?.broadcast({ t: "host-ending" });
     }
-  } else if (role === "host") {
-    S.net?.broadcast({ t: "host-ending" });
-  }
-  if (S.stageRecActive && role === "host") {
-    try { await S.stageRec.stop(); S.stageRec.release?.(); } catch { /* ignore */ }
+    if (S.stageRecActive) {
+      try { await S.stageRec.stop(); S.stageRec.release?.(); } catch { /* ignore */ }
+    }
+  } else if (S.recActive) {
+    // Don't abandon the local master on leave — finalize it so the file is
+    // saved (and the host is told) before this tab goes away.
+    await stopOwnRecording("guest", { silent: true });
   }
   teardownAndReload();
 }

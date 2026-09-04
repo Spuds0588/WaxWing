@@ -49,4 +49,7 @@ export const STORAGE_KEYS = {
   cam: "ww.cameraId",
   mic: "ww.micId",
   folder: "ww.folderName",
+  optVideo: "ww.optVideo",
+  optMic: "ww.optMic",
+  optSave: "ww.optSave",
 };

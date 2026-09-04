@@ -123,9 +123,27 @@ export class Network {
   ensureGuest(peerId, meta = {}) {
     let guest = this.guests.get(peerId);
     if (!guest) {
-      guest = { key: peerId, name: meta.name || "Guest", dc: null, inCall: null, outStageCall: null };
+      // media/save describe what the guest enabled at join (camera/mic on,
+      // and whether they record a local master). Guests that join with media
+      // off simply don't fire a guest-media event — the host still needs to
+      // know how to render their tile and whether to wait for their master.
+      guest = {
+        key: peerId,
+        name: meta.name || "Guest",
+        media: meta.media || { video: true, audio: true },
+        save: meta.save !== false,
+        dc: null,
+        inCall: null,
+        outStageCall: null,
+      };
       this.guests.set(peerId, guest);
-      this.emit({ type: "guest-add", key: peerId, name: guest.name });
+      this.emit({
+        type: "guest-add",
+        key: peerId,
+        name: guest.name,
+        media: guest.media,
+        save: guest.save,
+      });
     } else if (meta.name && guest.name === "Guest") {
       guest.name = meta.name;
       this.emit({ type: "guest-meta", key: peerId, name: guest.name });
@@ -190,15 +208,27 @@ export class Network {
   /** Guest role: dial the host with our proxy AV + a data channel. */
   dialHost(proxyStream) {
     if (this.role !== "guest" || !this.peer?.id) return;
-    const dc = this.peer.connect(this.room, {
-      metadata: { name: this.displayName, kind: "guest" },
-    });
+    // prefs = { video, audio, save } — what the guest enabled at join. The
+    // host reads it from the data-channel metadata so it can render tiles
+    // for media-less joins and skip waiting for their master after a show.
+    const prefs = this.prefs || {};
+    const meta = {
+      name: this.displayName,
+      kind: "guest",
+      media: { video: Boolean(prefs.video), audio: Boolean(prefs.audio) },
+      save: prefs.save !== false,
+    };
+    const dc = this.peer.connect(this.room, { metadata: meta });
     this.hostDc = dc;
     this.wireDataChannel(dc, null);
     dc.on("close", () => this.emit({ type: "host-dc-closed" }));
 
+    // Listener-only guests (everything off) dial no media call — an SDP
+    // offer with zero m-lines negotiates poorly. Their tile is rendered
+    // from the handshake metadata and they still receive the stage call.
+    if (!proxyStream || !proxyStream.getTracks().length) return;
     const call = this.peer.call(this.room, proxyStream, {
-      metadata: { name: this.displayName, kind: "media" },
+      metadata: { ...meta, kind: "media" },
     });
     call.on("error", () => {
       if (!this.destroyed) {

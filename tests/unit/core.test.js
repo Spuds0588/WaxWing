@@ -7,6 +7,7 @@ import { autoRects } from "../../js/stage.js";
 import { clamp, coverCrop, fmtBytes, randomRoomCode, safeName } from "../../js/util.js";
 import { ROOM_CODE_ALPHABET, SYNC } from "../../js/config.js";
 import { uploadBlob } from "../../js/sync.js";
+import { mixAssignments } from "../../js/audio-bus.js";
 
 const EPS = 1e-9;
 
@@ -139,6 +140,44 @@ describe("uploadBlob chunking", () => {
       blob,
     });
     expect(waits).toBeGreaterThan(0);
+  });
+});
+
+describe("mixAssignments (nobody hears themselves)", () => {
+  const keys = ["self", "g1", "g2"];
+
+  test("the host's speakers carry only remote voices", () => {
+    const plan = mixAssignments(keys, ["g1", "g2"]);
+    expect(plan.monitor).not.toContain("self");
+    expect([...plan.monitor].sort()).toEqual(["g1", "g2"]);
+  });
+
+  test("the master bus (stage recording source) carries every voice once", () => {
+    const plan = mixAssignments(keys, ["g1", "g2"]);
+    expect([...plan.master].sort()).toEqual(["g1", "g2", "self"]);
+    expect(new Set(plan.master).size).toBe(plan.master.length);
+  });
+
+  test("each guest's stage bus excludes that guest but includes everyone else", () => {
+    const plan = mixAssignments(keys, ["g1", "g2"]);
+    for (const g of ["g1", "g2"]) {
+      expect(plan.guests[g]).not.toContain(g); // no self-echo on the stage
+      expect(plan.guests[g]).toContain("self");
+      const others = keys.filter((k) => k !== g);
+      expect([...plan.guests[g]].sort()).toEqual([...others].sort());
+    }
+  });
+
+  test("voice-only guest sets still exclude that guest from their own mix", () => {
+    const plan = mixAssignments(["self", "mic1"], ["mic1"]);
+    expect(plan.guests.mic1).toEqual(["self"]);
+    expect(plan.monitor).toEqual(["mic1"]);
+  });
+
+  test("a lone host hears nothing on the monitor bus", () => {
+    const plan = mixAssignments(["self"], []);
+    expect(plan.monitor).toEqual([]);
+    expect(plan.master).toEqual(["self"]);
   });
 });
 

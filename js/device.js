@@ -15,43 +15,62 @@ export async function listDevices() {
   return { cams, mics };
 }
 
-function constraintsFor(camId, micId, ladder) {
+function videoConstraintsFor(camId, ladder) {
   return {
-    video: {
-      deviceId: camId ? { exact: camId } : undefined,
-      width: { ideal: ladder.width },
-      height: { ideal: ladder.height },
-      frameRate: { ideal: 30 },
-    },
-    audio: {
-      deviceId: micId ? { exact: micId } : undefined,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
+    deviceId: camId ? { exact: camId } : undefined,
+    width: { ideal: ladder.width },
+    height: { ideal: ladder.height },
+    frameRate: { ideal: 30 },
   };
 }
 
-// Walk the quality ladder: try 4K first, degrade gracefully down to 720p.
-export async function openMasterStream({ camId, micId, onAttempt }) {
+function audioConstraints(micId) {
+  return {
+    deviceId: micId ? { exact: micId } : undefined,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+}
+
+/**
+ * Opens the participant's local master stream for the media they enabled:
+ *   wantVideo+wantAudio -> the 4K->720p ladder (the "proxy" master)
+ *   wantVideo only      -> same ladder, no mic
+ *   wantAudio only      -> mic at default quality
+ *   neither             -> an empty stream (listener-only participant)
+ */
+export async function openMasterStream({ camId, micId, onAttempt, wantVideo = true, wantAudio = true }) {
+  if (!wantVideo && !wantAudio) {
+    return { stream: new MediaStream(), quality: "none", ladder: "none" };
+  }
+  // wantAudio-only tries once with no ladder; wantVideo walks 4K->720p.
+  const ladder = wantVideo ? MASTER_LADDER : [{ width: 0, height: 0, label: "audio" }];
   let lastError = null;
-  for (const ladder of MASTER_LADDER) {
+  for (const step of ladder) {
     try {
-      if (onAttempt) onAttempt(ladder);
-      const stream = await navigator.mediaDevices.getUserMedia(
-        constraintsFor(camId, micId, ladder),
-      );
+      if (onAttempt && step.label !== "audio") onAttempt(step);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: wantVideo ? videoConstraintsFor(camId, step) : false,
+        audio: wantAudio ? audioConstraints(micId) : false,
+      });
       const video = stream.getVideoTracks()[0];
       const settings = video?.getSettings() || {};
-      const label = settings.width ? `${settings.width}×${settings.height}` : ladder.label;
-      return { stream, quality: label, ladder: ladder.label };
+      const label = settings.width ? `${settings.width}×${settings.height}` : step.label;
+      return { stream, quality: label, ladder: step.label };
     } catch (err) {
       lastError = err;
     }
   }
+  const what =
+    wantVideo && wantAudio
+      ? "your camera and microphone"
+      : wantVideo
+        ? "your camera"
+        : "your microphone";
   const err = new Error(
-    "Could not open your camera and microphone. Check that they are plugged in " +
-      "and that this site has camera/microphone permission.",
+    `Could not open ${what}. Check that it's plugged in and that this site has ` +
+      "camera/microphone permission.",
   );
   err.cause = lastError;
   throw err;
