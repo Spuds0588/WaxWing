@@ -37,9 +37,14 @@ bun test           # unit tests (bun's runner, no browser needed)
 bun run test:e2e   # Playwright mobile suite: build + chromium + 3 phone profiles
 ```
 
-The E2E suite runs the guest and host pre-flight shells on **Android-portrait
-(412×915), iOS-portrait (390×844) and phone-landscape (844×390)** viewports and
-fails on any horizontal/vertical overflow or broken mobile affordance.
+The E2E suite runs on **Android-portrait (412×915), iOS-portrait (390×844) and
+phone-landscape (844×390)** viewports and fails on any horizontal/vertical
+overflow or broken mobile affordance. It covers the guest and host pre-flight
+shells *and* a full **live session**: the spec spins up a local PeerJS
+signaling server, connects a real host tab to a real guest tab over WebRTC
+with fake cameras, brings the stage on air, records a few seconds, stops, and
+asserts every screen (session shell, stage, sync modals on both sides) still
+fits the phone with zero JS errors.
 Playwright's chromium needs system libraries on Linux — CI handles that with
 `playwright install --with-deps` (see `.github/workflows/ci.yml`); locally run
 `bunx playwright install --with-deps chromium` once.
@@ -63,6 +68,14 @@ CI (`.github/workflows/ci.yml`) runs typecheck + unit tests + build + the E2E
 suite on every push and pull request.
 
 ## How it works
+
+### Preflight camera preview
+Before you commit to joining, the welcome modal opens a **live, muted camera
+preview** so you can see yourself and your framing first — picking a different
+camera in the dropdown restarts the preview instantly. It runs at a low
+640×480 so it's cheap, and it's stopped the moment you enter the studio (the
+real capture then opens at full resolution). If the camera can't start (no
+permission yet, no camera), the box says so and joining still works.
 
 ### Roles come from the URL
 - **Host** — open the app with no parameters. You land on a selling home page;

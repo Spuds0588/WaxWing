@@ -294,12 +294,12 @@ export class Stage {
       const tagW = Math.min(pw, labelWidth + tagH * 2.1 + 60);
       this.ctx.fillStyle = "rgba(5,6,10,0.62)";
       this.ctx.fillRect(px, py, tagW, tagH);
-      this.ctx.fillStyle = r.isSelf ? "#ffb224" : "#ffffff";
+      this.ctx.fillStyle = r.isSelf ? "#ffc63d" : "#ffffff";
       this.ctx.textBaseline = "middle";
       this.ctx.fillText(r.label, px + tagH * 0.55, py + tagH / 2 + 1);
       this.ctx.restore();
 
-      this.ctx.strokeStyle = r.isSelf ? "rgba(255,178,36,0.85)" : "rgba(255,255,255,0.14)";
+      this.ctx.strokeStyle = r.isSelf ? "rgba(255,198,61,0.85)" : "rgba(255,255,255,0.14)";
       this.ctx.lineWidth = r.isSelf ? 3 : 1;
       this.ctx.beginPath();
       this.ctx.roundRect(px, py, pw, ph, radius);

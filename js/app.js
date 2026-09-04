@@ -74,6 +74,8 @@ const S = {
   quality: "",
   entered: false,
   masterStream: null,
+  previewStream: null,
+  previewCam: "",
   proxyVideoTrack: null,
   net: null,
   bus: null,
@@ -171,7 +173,8 @@ function bootStudio() {
 
   // Wire static UI.
   els.btnEnter.addEventListener("click", handleEnter);
-  els.btnRefreshDevices.addEventListener("click", () => populateDeviceSelects());
+  els.btnRefreshDevices.addEventListener("click", () => populateDeviceSelects().then(startCameraPreview));
+  els.camSelect.addEventListener("change", startCameraPreview);
   els.btnFolder.addEventListener("click", async () => {
     const handle = await fs.chooseDefaultDir();
     if (handle) updateFolderLabel();
@@ -191,7 +194,7 @@ function bootStudio() {
     v.play().catch(() => notify("Browser blocked audio — tap again after interacting.", "danger"));
     els.stageAudioHint.classList.add("hidden");
   });
-  window.addEventListener("devicechange", () => populateDeviceSelects(true));
+  window.addEventListener("devicechange", () => populateDeviceSelects(true).then(startCameraPreview));
   window.addEventListener("beforeunload", (e) => {
     if (S.recActive || S.stageRecActive || (S.sync && !S.sync.done) || uploadInProgress) {
       e.preventDefault();
@@ -215,18 +218,70 @@ function bootStudio() {
   if (isIOS()) {
     // iOS won't reveal device labels without a user gesture — probing here
     // would just throw a premature permission prompt, so populate bare lists.
-    populateDeviceSelects();
+    populateDeviceSelects().then(startCameraPreview);
   } else {
     navigator.mediaDevices
       ?.getUserMedia({ audio: true, video: true })
-      .then((st) => {
+      .then(async (st) => {
         st.getTracks().forEach((t) => t.stop());
-        populateDeviceSelects();
+        await populateDeviceSelects();
+        startCameraPreview();
       })
-      .catch(() => populateDeviceSelects());
+      .catch(async () => {
+        await populateDeviceSelects();
+        startCameraPreview();
+      });
   }
 
   updateFolderLabel();
+}
+
+// ---- camera preview (preflight, before you commit to entering) -----------
+
+// A cheap, muted self-view so the user can verify their camera in the
+// welcome modal BEFORE joining. On Enter the master ladder re-opens the
+// camera at full resolution; the preview stream is only ever a low-res
+// stand-in and is stopped the moment the studio opens.
+
+const PREVIEW_RES = { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } };
+
+function stopPreview() {
+  stopStream(S.previewStream);
+  S.previewStream = null;
+  S.previewCam = "";
+  els.previewVideo.srcObject = null;
+}
+
+async function startCameraPreview() {
+  if (!navigator.mediaDevices?.getUserMedia || S.entered) return;
+  const camId = els.camSelect.value;
+  // Already previewing this camera — don't restart (e.g. devicechange).
+  if (S.previewCam === camId && S.previewStream) return;
+  stopPreview();
+  S.previewCam = camId;
+  els.previewState.textContent = "Starting camera…";
+  els.previewState.classList.remove("hidden");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: camId ? { exact: camId } : undefined, ...PREVIEW_RES },
+      audio: false,
+    });
+    // The selection may have changed while the permission prompt was up.
+    if (els.camSelect.value !== camId || S.entered) {
+      stopStream(stream);
+      return;
+    }
+    S.previewStream = stream;
+    els.previewVideo.srcObject = stream;
+    els.previewState.classList.add("hidden");
+  } catch {
+    // Permission denied / no camera: stay graceful — joining is still fine.
+    els.previewVideo.srcObject = null;
+    els.previewState.textContent = camId
+      ? "Preview unavailable for that camera — you can still join and check on stage."
+      : "Camera preview needs permission — you can still join and check on stage.";
+    els.previewState.classList.remove("hidden");
+  }
 }
 
 let uploadInProgress = false;
@@ -338,6 +393,9 @@ async function handleEnter() {
     S.quality = quality;
     S.proxyVideoTrack = S.role === "guest" ? makeProxyVideoTrack(stream) : null;
 
+    // The preflight preview served its purpose — drop it so the camera
+    // light is off until the master ladder opens the real session stream.
+    stopPreview();
     els.previewVideo.srcObject = stream;
     els.previewState.classList.add("hidden");
     try {
@@ -1230,7 +1288,13 @@ async function handleExit() {
       S.net?.broadcast({ t: "host-ending", run: S.recRun });
       await stopOwnRecording("host");
     } else {
-      S.net?.sendToHost({ t: "rec-done", run: S.recRun, name: "", size: 0 });
+      if (S.recActive) {
+        // Don't abandon the local master on leave — finalize it so the file
+        // is saved (and the host is told) before this tab goes away.
+        await stopOwnRecording("guest", { silent: true });
+      } else {
+        S.net?.sendToHost({ t: "rec-done", run: S.recRun, name: "", size: 0 });
+      }
     }
   } else if (role === "host") {
     S.net?.broadcast({ t: "host-ending" });
@@ -1244,6 +1308,7 @@ async function handleExit() {
 function teardownAndReload() {
   try { S.net?.destroy(); } catch { /* ignore */ }
   cleanupMedia();
+  stopPreview();
   location.reload();
 }
 

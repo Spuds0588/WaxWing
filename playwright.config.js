@@ -58,10 +58,21 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: "bunx vite preview --port 5199 --strictPort",
-    url: "http://127.0.0.1:5199",
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: "bunx vite preview --port 5199 --strictPort",
+      url: "http://127.0.0.1:5199",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      // Local PeerJS signaling (ws://127.0.0.1) so the live-session spec can
+      // actually connect two tabs without depending on the public cloud or
+      // outbound WebSockets. Media + files still travel directly P2P.
+      command: "bunx peerjs --port 5198",
+      url: "http://127.0.0.1:5198",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 });

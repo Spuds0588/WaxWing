@@ -106,6 +106,10 @@ b {
   width: 20px;
   height: auto;
   flex: 0 0 auto;
+  /* The sprite <symbol> owns the viewBox; the usage <svg> has none, so
+     lock the glyph's 47.55:38.38 proportions here. (A viewBox on BOTH the
+     usage svg and the symbol makes Chromium skip painting the <use>.) */
+  aspect-ratio: 47.55 / 38.38;
   filter: drop-shadow(0 1px 6px rgba(255, 198, 61, 0.25));
 }
 .brand-name {
@@ -914,13 +918,10 @@ select option {
   padding: 12px;
   z-index: 1;
 }
-.preview-box video[src]:not([src=""]) ~ .preview-state,
-.preview-box video:not([src=""]):not([src]) {
-  display: none;
-}
-.preview-box:has(video:not([src=""])) .preview-state {
-  display: none;
-}
+/* The state overlay is driven by the .hidden class from JS — the broken
+   src-attribute selectors used to permanently hide the <video> element
+   itself (srcObject never sets a src attribute), so the preflight preview
+   could never render. */
 .btn-enter {
   width: 100%;
   padding: 12px;
@@ -1309,6 +1310,7 @@ input[type="text"],
   height: auto;
   flex: 0 0 auto;
   color: var(--text);
+  aspect-ratio: 47.55 / 38.38;
   filter: drop-shadow(0 0 9px rgba(255, 198, 61, 0.16));
 }
 .brand-lg .brand-logo {
@@ -1563,6 +1565,7 @@ body.mode-app .modal-backdrop {
   width: 30%;
   max-width: 74px;
   height: auto;
+  aspect-ratio: 47.55 / 38.38;
   color: var(--text);
   opacity: 0.9;
   filter: drop-shadow(0 0 14px rgba(255, 198, 61, 0.25));

@@ -72,6 +72,48 @@ test("join attempt without camera permission fails gracefully on mobile", async 
   await expect(page.locator("#welcomeModal")).toContainText(ROOM);
 });
 
+// Regression guard for the sprite bug: a <use> referencing the sprite symbol
+// can resolve (getBBox works) while still painting NOTHING — which is what
+// happened when the usage <svg> and the <symbol> both carried a viewBox
+// (Chromium skips painting the <use>). This test rasterizes the actual
+// rendered logo and requires visible pixels, so an empty <use> fails it.
+async function lightPixels(page, locator, min = 20) {
+  const box = await locator.boundingBox();
+  expect(box, "logo must be laid out").toBeTruthy();
+  const shot = await page.screenshot({ clip: box });
+  const light = await page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = "data:image/png;base64," + b64;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let light = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] > 16) {
+        const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        if (lum > 120) light++;
+      }
+    }
+    return light;
+  }, shot.toString("base64"));
+  expect(light, `brand mark painted only ${light} visible pixels`).toBeGreaterThan(min);
+}
+
+test("the waxwing brand mark actually renders on the page", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".land-brand .brand-logo")).toBeVisible();
+  await lightPixels(page, page.locator(".land-brand .brand-logo"));
+
+  // Inside the preflight modal (the guest-join surface) too.
+  await page.locator("#landing .land-hero [data-start]").click();
+  await expect(page.locator("#welcomeModal .brand-lg .brand-logo")).toBeVisible();
+  await lightPixels(page, page.locator("#welcomeModal .brand-lg .brand-logo"));
+});
+
 test("host funnels from the selling home page into a fitting studio shell", async ({ page }) => {
   await page.goto("/"); // no ?room => host
 
