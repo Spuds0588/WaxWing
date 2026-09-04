@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 132" fill="none" role="img" aria-label="WaxWing — a minimalist cedar waxwing mark">
+  <!-- Soft yellow belly & undertail -->
+  <path d="M88,84 C82,96 66,104 48,102 C36,100 26,95 22,91 C32,98 50,100 64,99 C76,98 86,92 88,84 Z" fill="#ffc63d"/>
+  <!-- Yellow band near the tail tip -->
+  <path d="M17,86 L26,88 L25,96 L16,94 Z" fill="#ffc63d"/>
+  <!-- Black eye mask -->
+  <path d="M96,52 C94,46 86,42 78,42 C70,42 64,46 62,52 C64,58 72,61 80,60 C88,59 94,56 96,52 Z" fill="#33363f"/>
+  <!-- Eye highlight -->
+  <circle cx="79" cy="51" r="1.8" fill="#f4efe3"/>
+  <!-- White underline beneath the mask -->
+  <path d="M92,60 C84,64 72,64 66,60" stroke="#efe8da" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Short beak -->
+  <path d="M97,53 L114,58 L99,62 Z" fill="#33363f"/>
+  <!-- Grey folded wing -->
+  <path d="M64,54 C58,66 50,76 39,82" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+  <path d="M70,60 C64,72 56,81 45,86" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+  <!-- Red waxy tips on the secondaries -->
+  <circle cx="38" cy="80" r="2.6" fill="#e8503a"/>
+  <circle cx="31" cy="84" r="2.6" fill="#e8503a"/>
+  <circle cx="24" cy="87" r="2.6" fill="#e8503a"/>
+  <!-- Body silhouette (crest, back, tail) -->
+  <path d="M96,46 C90,37 79,27 66,21 C58,29 54,34 52,40 C47,51 42,60 37,68 C30,79 21,86 13,88 C12,90 12,93 15,95 C28,99 40,100 48,102 C62,106 74,106 84,101 C90,97 94,89 96,81 C98,71 99,60 98,54 C97,48 97,46 96,46 Z"
+    stroke="#efe8da" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Feet on the perch -->
+  <path d="M70,104 L69,111" stroke="#efe8da" stroke-width="2" stroke-linecap="round"/>
+  <path d="M79,104 L80,111" stroke="#efe8da" stroke-width="2" stroke-linecap="round"/>
+  <!-- Perch -->
+  <path d="M12,112 L150,112" stroke="#554d3f" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0b10" />
+    <meta
+      name="description"
+      content="WaxWing — a zero-backend, peer-to-peer podcasting and live-streaming studio. Record local 4K masters and direct the show from your browser."
+    />
+    <title>WaxWing — Local Stream Studio</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2313110c'/%3E%3Cpath d='M18 6c-3-1-6 1-7 4-1 4 1 8 3 11-3 2-5 2-6 2l-1 1 2 2c4 1 7 2 9 2 3 0 5-2 6-5 1-3 1-7 0-11-1-3-3-6-6-6z' fill='%23efe8da'/%3E%3Ccircle cx='19' cy='22' r='2.2' fill='%23ffc63d'/%3E%3Ccircle cx='8' cy='19' r='1.9' fill='%23e8503a'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <!-- ============ Top bar ============ -->
+    <header id="topbar">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 160 132" aria-hidden="true">
+          <path d="M88,84 C82,96 66,104 48,102 C36,100 26,95 22,91 C32,98 50,100 64,99 C76,98 86,92 88,84 Z" fill="#ffc63d"/>
+          <path d="M17,86 L26,88 L25,96 L16,94 Z" fill="#ffc63d"/>
+          <path d="M96,52 C94,46 86,42 78,42 C70,42 64,46 62,52 C64,58 72,61 80,60 C88,59 94,56 96,52 Z" fill="#33363f"/>
+          <circle cx="79" cy="51" r="1.8" fill="#f4efe3"/>
+          <path d="M92,60 C84,64 72,64 66,60" stroke="#efe8da" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M97,53 L114,58 L99,62 Z" fill="#33363f"/>
+          <path d="M64,54 C58,66 50,76 39,82" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+          <path d="M70,60 C64,72 56,81 45,86" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="38" cy="80" r="2.6" fill="#e8503a"/>
+          <circle cx="31" cy="84" r="2.6" fill="#e8503a"/>
+          <circle cx="24" cy="87" r="2.6" fill="#e8503a"/>
+          <path d="M96,46 C90,37 79,27 66,21 C58,29 54,34 52,40 C47,51 42,60 37,68 C30,79 21,86 13,88 C12,90 12,93 15,95 C28,99 40,100 48,102 C62,106 74,106 84,101 C90,97 94,89 96,81 C98,71 99,60 98,54 C97,48 97,46 96,46 Z" stroke="#efe8da" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M70,104 L69,111" stroke="#efe8da" stroke-width="2" stroke-linecap="round"/>
+          <path d="M79,104 L80,111" stroke="#efe8da" stroke-width="2" stroke-linecap="round"/>
+          <path d="M12,112 L150,112" stroke="#554d3f" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name">WaxWing</span>
+        <span class="brand-tag">Local Stream Studio</span>
+      </div>
+
+      <div id="roomCluster" class="room-cluster hidden">
+        <span id="connPill" class="pill pill-idle">Starting…</span>
+        <div class="room-code" id="roomCodeBox" title="Room code">
+          <span id="roomChipCode">------</span>
+          <button id="btnCopyInvite" class="btn btn-ghost btn-icon" title="Copy invite link" aria-label="Copy invite link">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="hostControls" class="host-controls hidden">
+        <button id="btnResetLayout" class="btn btn-ghost" title="Reset tile layout" hidden>
+          Auto-layout
+        </button>
+        <button id="btnStageRec" class="btn btn-stage" title="Record a Director's Cut of the stage (host only)">
+          <span class="dot" aria-hidden="true"></span> Stage
+        </button>
+        <button id="btnRecord" class="btn btn-rec">
+          <span class="dot" aria-hidden="true"></span><span id="btnRecordLabel">Record</span>
+        </button>
+        <button id="btnExit" class="btn btn-ghost btn-danger-text" title="Leave the studio">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 0 0-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/></svg>
+          <span id="btnExitLabel">Leave</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ============ Status strip ============ -->
+    <div id="statusbar" class="statusbar">
+      <div class="status-chips">
+        <span id="recChip" class="chip chip-rec hidden"><span class="pulse-dot"></span>Recording <b id="recTime">00:00</b></span>
+        <span id="stageChip" class="chip chip-stage hidden"><span class="pulse-dot"></span>Stage <b id="stageTime">00:00</b></span>
+        <span id="syncChip" class="chip chip-sync hidden">Syncing guest files…</span>
+      </div>
+      <span id="qualityNote" class="quality-note"></span>
+    </div>
+
+    <!-- ============ Studio ============ -->
+    <main id="studio">
+      <section id="stageShell" class="stage-shell">
+        <div id="stage" class="stage" aria-label="Live stage">
+          <div id="stageEmpty" class="stage-empty hidden">
+            <div class="empty-card">
+              <span class="empty-title">Waiting for guests</span>
+              <span class="empty-sub">Share the room code to bring people on stage.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Guest overlays (self-view pip, audio unlock, full screen) -->
+        <div id="guestSelf" class="guest-self hidden">
+          <video
+            id="guestSelfVideo"
+            autoplay
+            muted
+            playsinline
+            webkit-playsinline
+            x5-playsinline
+          ></video>
+          <span class="guest-self-tag">You</span>
+        </div>
+        <button id="stageAudioHint" class="stage-audio-hint hidden">Tap to hear the show</button>
+        <button
+          id="btnFullscreen"
+          class="fs-btn hidden"
+          title="Full screen"
+          aria-label="Full screen"
+        >
+          <svg class="ico-fs-in" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+          <svg class="ico-fs-out hidden" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+        </button>
+        <div id="orientHint" class="orient-hint hidden">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7.5 9h9v6h-9zM12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14z"/></svg>
+          Turn your phone sideways for the full stage
+        </div>
+      </section>
+
+      <!-- Host sidebar -->
+      <aside id="sidebar" class="sidebar hidden">
+        <section class="side-card">
+          <div class="side-title">
+            <span>Guests</span><span id="guestCountBadge" class="badge">0/3</span>
+          </div>
+          <ul id="guestList" class="guest-list"></ul>
+          <p id="guestListEmpty" class="muted">No guests yet — send them the invite.</p>
+        </section>
+
+        <section class="side-card">
+          <div class="side-title"><span>Invite</span></div>
+          <div class="invite-code" id="inviteCode">------</div>
+          <button id="btnCopyInvite2" class="btn btn-primary btn-block">Copy invite link</button>
+          <p class="muted small">Guests don't need an account — any browser with a camera works, including phones. Chrome or Edge on desktop unlocks 4K direct-to-disk recording.</p>
+        </section>
+
+        <section class="side-card">
+          <div class="side-title"><span>Recording</span></div>
+          <ul id="recStatusList" class="rec-list">
+            <li id="recRowSelf" class="rec-row" data-state="idle">
+              <span class="rec-name">Your local 4K master</span>
+              <span class="rec-state">Idle</span>
+            </li>
+            <li id="recRowStage" class="rec-row" data-state="idle">
+              <span class="rec-name">Director's Cut (stage)</span>
+              <span class="rec-state">Idle</span>
+            </li>
+          </ul>
+          <p class="muted small">The <b>Stage</b> button records the whole show from the host tab (1080p region capture). Guests record their own camera locally and their files are synced to you when the show stops.</p>
+        </section>
+
+        <section class="side-card">
+          <div class="side-title"><span>Details</span></div>
+          <p class="muted small" id="detailNote">Recorder: <b id="recModeLabel">—</b><br />Capture: <b id="capQualityLabel">—</b></p>
+        </section>
+      </aside>
+    </main>
+
+    <!-- ============ Welcome / preflight ============ -->
+    <div id="welcomeModal" class="modal-backdrop">
+      <div class="modal modal-wide">
+        <div class="modal-head">
+          <div class="brand brand-lg">
+            <svg class="brand-logo" viewBox="0 0 160 132" aria-hidden="true">
+              <path d="M88,84 C82,96 66,104 48,102 C36,100 26,95 22,91 C32,98 50,100 64,99 C76,98 86,92 88,84 Z" fill="#ffc63d"/>
+              <path d="M17,86 L26,88 L25,96 L16,94 Z" fill="#ffc63d"/>
+              <path d="M96,52 C94,46 86,42 78,42 C70,42 64,46 62,52 C64,58 72,61 80,60 C88,59 94,56 96,52 Z" fill="#33363f"/>
+              <circle cx="79" cy="51" r="1.8" fill="#f4efe3"/>
+              <path d="M92,60 C84,64 72,64 66,60" stroke="#efe8da" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M97,53 L114,58 L99,62 Z" fill="#33363f"/>
+              <path d="M64,54 C58,66 50,76 39,82" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+              <path d="M70,60 C64,72 56,81 45,86" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="38" cy="80" r="2.6" fill="#e8503a"/>
+              <circle cx="31" cy="84" r="2.6" fill="#e8503a"/>
+              <circle cx="24" cy="87" r="2.6" fill="#e8503a"/>
+              <path d="M96,46 C90,37 79,27 66,21 C58,29 54,34 52,40 C47,51 42,60 37,68 C30,79 21,86 13,88 C12,90 12,93 15,95 C28,99 40,100 48,102 C62,106 74,106 84,101 C90,97 94,89 96,81 C98,71 99,60 98,54 C97,48 97,46 96,46 Z" stroke="#efe8da" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M12,112 L150,112" stroke="#554d3f" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <span class="brand-name">WaxWing</span>
+          </div>
+          <p id="roleBlurb" class="role-blurb"></p>
+        </div>
+
+        <div class="modal-body">
+          <div class="form-col">
+            <label class="field">
+              <span>Your name</span>
+              <input id="nameInput" type="text" maxlength="24" placeholder="e.g. Alex Rivera" autocomplete="name" />
+            </label>
+
+            <div class="field-row">
+              <label class="field">
+                <span>Camera</span>
+                <select id="camSelect"></select>
+              </label>
+              <label class="field">
+                <span>Microphone</span>
+                <select id="micSelect"></select>
+              </label>
+              <button id="btnRefreshDevices" class="btn btn-ghost self-end" title="Rescan devices">↻</button>
+            </div>
+
+            <div class="folder-row">
+              <button id="btnFolder" class="btn btn-outline">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+                Choose recording folder
+              </button>
+              <span id="folderLabel" class="folder-label muted">Recommended — writes 4K masters straight to disk.</span>
+            </div>
+
+            <div class="cap-row">
+              <ul id="capList" class="cap-list"></ul>
+            </div>
+
+            <p id="welcomeError" class="error hidden"></p>
+          </div>
+
+          <div class="preview-col">
+            <div id="previewBox" class="preview-box">
+              <video
+                id="previewVideo"
+                autoplay
+                muted
+                playsinline
+                webkit-playsinline
+                x5-playsinline
+              ></video>
+              <span id="previewState" class="preview-state">Camera preview will appear here</span>
+            </div>
+            <button id="btnEnter" class="btn btn-primary btn-enter">
+              <span id="btnEnterLabel">Enter the studio</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Sync progress ============ -->
+    <div id="syncModal" class="modal-backdrop hidden">
+      <div class="modal">
+        <div class="modal-head">
+          <h2 id="syncTitle">Syncing guest recordings</h2>
+        </div>
+        <ul id="syncList" class="sync-list"></ul>
+        <div class="sync-foot">
+          <p id="syncNote" class="muted small">
+            Files stream straight from each guest's disk over a peer-to-peer data channel. Keep all tabs open until this finishes.
+          </p>
+          <button id="btnSyncClose" class="btn btn-primary" disabled>Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keep-the-tab-open reminder -->
+    <div id="dontClosePill" class="dont-close hidden">
+      <span class="pulse-dot"></span>
+      <span id="dontCloseText">Recording — keep this tab open</span>
+    </div>
+
+    <!-- Fatal / session end -->
+    <div id="fatalPanel" class="modal-backdrop hidden">
+      <div class="modal">
+        <div class="modal-head"><h2 id="fatalTitle">Session ended</h2></div>
+        <p id="fatalMessage" class="muted">Something went wrong.</p>
+        <button id="btnFatalReload" class="btn btn-primary btn-block">Back to start</button>
+      </div>
+    </div>
+
+    <canvas id="composerCanvas" class="composer-canvas" width="1920" height="1080" aria-hidden="true"></canvas>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

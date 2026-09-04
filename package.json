@@ -1,0 +1,24 @@
+{
+  "name": "waxwing",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local Stream Studio — a zero-backend, peer-to-peer podcasting and live-streaming studio that runs entirely in the browser.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "test": "bun test tests/unit",
+    "test:unit": "bun test tests/unit",
+    "test:e2e": "bun run build && bunx playwright test"
+  },
+  "dependencies": {
+    "peerjs": "^1.5.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
