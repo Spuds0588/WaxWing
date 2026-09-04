@@ -13,13 +13,15 @@
     "test:unit": "bun test tests/unit",
     "test:e2e": "bun run build && bunx playwright test",
     "og:gen": "node scripts/gen-og.mjs",
-    "favicon:gen": "node scripts/gen-favicon.mjs"
+    "favicon:gen": "node scripts/gen-favicon.mjs",
+    "smoke:2tab": "bun scripts/smoke-2tab.mjs"
   },
   "dependencies": {
     "peerjs": "^1.5.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",
+    "peer": "1.0.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }

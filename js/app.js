@@ -836,12 +836,19 @@ async function stopOwnRecording(role, opts = {}) {
     if (!S.sync || S.sync.done) showDontClose(false);
     els.recRowSelf.querySelector(".rec-state").textContent = "Saved locally";
   } catch (err) {
+    // A failed finalize must still leave the controls usable and honest
+    // (e.g. a full disk or a sink write error at stop time).
     S.recActive = false;
     S.localRec = null;
     stopRecTimers();
     els.btnRecord.disabled = false;
     els.btnRecordLabel.textContent = "Record";
     els.btnRecord.classList.remove("on");
+    els.recChip.classList.add("hidden");
+    els.recRowSelf.dataset.state = "idle";
+    els.recRowSelf.querySelector(".rec-state").textContent = "Stopped — not saved";
+    updateComposerNeed();
+    showDontClose(Boolean(S.stageRecActive) || (S.sync && !S.sync.done));
     notify(`Recording had a problem: ${err.message}`, "danger");
   } finally {
     S.busy = false;

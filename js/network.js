@@ -54,6 +54,10 @@ export class Network {
     this.role = "guest";
     this.room = roomCode;
     await this.initPeer(); // random id
+    // initPeer() resolves from the same single 'open' event PeerJS emits, so
+    // by the time we resume the peer may already be open — only wait for a
+    // fresh event if it isn't.
+    if (this.peer.id) return;
     await new Promise((resolve) => {
       const tryOpen = () => {
         this.peer.off("open", tryOpen);
@@ -65,7 +69,12 @@ export class Network {
 
   initPeer(id) {
     return new Promise((resolve, reject) => {
-      const peer = new Peer(id, { debug: 0 });
+      // Signaling defaults to PeerJS's free public cloud. Tests (see
+      // scripts/smoke-2tab.mjs) may point at a local signaling server by
+      // injecting window.__WW_PEER__ = { host, port, path, secure } before
+      // this module loads.
+      const override = (typeof window !== "undefined" && window.__WW_PEER__) || {};
+      const peer = new Peer(id, { debug: 0, ...override });
       this.peer = peer;
 
       peer.on("open", () => {

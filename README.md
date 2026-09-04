@@ -44,6 +44,21 @@ Playwright's chromium needs system libraries on Linux — CI handles that with
 `playwright install --with-deps` (see `.github/workflows/ci.yml`); locally run
 `bunx playwright install --with-deps chromium` once.
 
+### Two-browser smoke (`bun run smoke:2tab`)
+
+```bash
+bun run smoke:2tab   # real host tab + real phone-shaped guest tab, fake A/V
+```
+
+Runs the genuine product flow between **two live tabs**: the desktop host walks
+the landing → studio funnel, a mobile guest joins through the invite link, the
+host's composited stage reaches the guest and decodes, and a real Record/Stop
+round-trip streams the guest's master back over the WebRTC data channel. It
+talks to a **local PeerJS signaling server** (so it also runs where external
+WebSockets are blocked) and swaps `showDirectoryPicker` for an in-memory twin
+of the File System Access handle — everything else is the real media, recorder
+and sync code. Needs chromium + system libs as above.
+
 CI (`.github/workflows/ci.yml`) runs typecheck + unit tests + build + the E2E
 suite on every push and pull request.
 
