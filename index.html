@@ -7,19 +7,123 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0a0b10" />
+    <meta name="theme-color" content="#0c0b08" />
+
+    <!-- SEO -->
+    <title>WaxWing — Free P2P Podcast & Live-Stream Studio (No Signup)</title>
     <meta
       name="description"
-      content="WaxWing — a zero-backend, peer-to-peer podcasting and live-streaming studio. Record local 4K masters and direct the show from your browser."
+      content="WaxWing is a free, zero-backend podcast and live-stream studio that runs in your browser. Host guests over peer-to-peer WebRTC, direct a 16:9 stage, and record full-quality 4K masters locally to your own disk — no account, no server, no upload."
     />
-    <title>WaxWing — Local Stream Studio</title>
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Corey Burns" />
+    <link rel="canonical" href="https://spuds0588.github.io/WaxWing/" />
+
+    <!-- Open Graph / social cards -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="WaxWing" />
+    <meta property="og:title" content="WaxWing — Free P2P Podcast & Live-Stream Studio" />
+    <meta
+      property="og:description"
+      content="Record and direct live podcasts or streams entirely in the browser. Guests join over peer-to-peer WebRTC with a magic link — no accounts, no servers. Full-quality masters are saved straight to your own disk."
+    />
+    <meta property="og:url" content="https://spuds0588.github.io/WaxWing/" />
+    <meta property="og:image" content="https://spuds0588.github.io/WaxWing/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="WaxWing — zero-backend P2P podcast and live-stream studio" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="WaxWing — Free P2P Podcast & Live-Stream Studio" />
+    <meta
+      name="twitter:description"
+      content="A free podcast/live-stream studio inside your browser. P2P guest links, draggable stage, 4K masters recorded to your own disk. No backend."
+    />
+    <meta name="twitter:image" content="https://spuds0588.github.io/WaxWing/og.png" />
+
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2313110c'/%3E%3Cpath d='M18 6c-3-1-6 1-7 4-1 4 1 8 3 11-3 2-5 2-6 2l-1 1 2 2c4 1 7 2 9 2 3 0 5-2 6-5 1-3 1-7 0-11-1-3-3-6-6-6z' fill='%23efe8da'/%3E%3Ccircle cx='19' cy='22' r='2.2' fill='%23ffc63d'/%3E%3Ccircle cx='8' cy='19' r='1.9' fill='%23e8503a'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/css/style.css" />
+
+    <!-- AEO: structured data for search & answer engines -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "WaxWing",
+      "alternateName": "WaxWing Local Stream Studio",
+      "url": "https://spuds0588.github.io/WaxWing/",
+      "image": "https://spuds0588.github.io/WaxWing/og.png",
+      "description": "Free, zero-backend podcast and live-stream studio that runs entirely in the browser. Host up to three guests over peer-to-peer WebRTC, direct a draggable 16:9 stage, and record full-quality 4K masters directly to your own disk. Guests join through magic links — no accounts, no servers.",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Web",
+      "browserRequirements": "Requires Chromium on desktop for 4K direct-to-disk recording; guests can join from any modern mobile or desktop browser.",
+      "featureList": [
+        "Zero-backend peer-to-peer studio",
+        "Up to 4 participants (1 host, 3 guests)",
+        "Guest magic links — no sign-up",
+        "Draggable 16:9 stage with auto layouts",
+        "Records full-quality 4K masters locally to disk",
+        "Post-show peer-to-peer file sync",
+        "1080p Director's Cut region capture",
+        "Dark-only minimalist theme"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "WaxWing"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is WaxWing free and do I need an account?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes — WaxWing is free with no sign-up. The host opens the app in a browser to start a studio, and guests join through a shared magic link. There is no backend server or database anywhere in the stack."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do guests join a WaxWing show?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The host copies an invite link from the studio. Guests open it on any modern browser (desktop or mobile), pick a name, and connect peer-to-peer over WebRTC — their camera and microphone never touch a server."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where are WaxWing recordings saved?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Recordings are saved on each participant's own device. On Chrome or Edge desktop the raw camera feed is written straight to a folder you choose via the File System Access API; after the show, guests' high-quality masters are transferred to the host peer-to-peer."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What browsers does WaxWing support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Full functionality — 4K direct-to-disk recording and the 1080p Director's Cut — requires Chromium on desktop (Chrome, Edge, Brave). Guests can also join from Safari and Firefox and from mobile browsers, with graceful degradation."
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
+    <h1 class="sr-only">WaxWing — a free, zero-backend podcast and live-stream studio that runs entirely in the browser</h1>
     <!-- ============ Top bar ============ -->
     <header id="topbar">
       <div class="brand">

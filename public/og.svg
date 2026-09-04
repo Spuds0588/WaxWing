@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="WaxWing — free, zero-backend P2P podcast and live-stream studio">
+  <defs>
+    <radialGradient id="glowA" cx="82%" cy="-5%" r="80%">
+      <stop offset="0%" stop-color="#ffc63d" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffc63d" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="2%" cy="110%" r="80%">
+      <stop offset="0%" stop-color="#e8503a" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#e8503a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0c0b08"/>
+  <rect width="1200" height="630" fill="url(#glowA)"/>
+  <rect width="1200" height="630" fill="url(#glowB)"/>
+
+  <!-- Cedar waxwing line mark -->
+  <g transform="translate(120 210) scale(3.2)" fill="none">
+    <path d="M88,84 C82,96 66,104 48,102 C36,100 26,95 22,91 C32,98 50,100 64,99 C76,98 86,92 88,84 Z" fill="#ffc63d"/>
+    <path d="M17,86 L26,88 L25,96 L16,94 Z" fill="#ffc63d"/>
+    <path d="M96,52 C94,46 86,42 78,42 C70,42 64,46 62,52 C64,58 72,61 80,60 C88,59 94,56 96,52 Z" fill="#33363f"/>
+    <circle cx="79" cy="51" r="1.8" fill="#f4efe3"/>
+    <path d="M92,60 C84,64 72,64 66,60" stroke="#efe8da" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M97,53 L114,58 L99,62 Z" fill="#33363f"/>
+    <path d="M64,54 C58,66 50,76 39,82" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+    <path d="M70,60 C64,72 56,81 45,86" stroke="#9aa3b5" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="38" cy="80" r="2.6" fill="#e8503a"/>
+    <circle cx="31" cy="84" r="2.6" fill="#e8503a"/>
+    <circle cx="24" cy="87" r="2.6" fill="#e8503a"/>
+    <path d="M96,46 C90,37 79,27 66,21 C58,29 54,34 52,40 C47,51 42,60 37,68 C30,79 21,86 13,88 C12,90 12,93 15,95 C28,99 40,100 48,102 C62,106 74,106 84,101 C90,97 94,89 96,81 C98,71 99,60 98,54 C97,48 97,46 96,46 Z" stroke="#efe8da" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12,112 L150,112" stroke="#554d3f" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+
+  <text x="520" y="300" font-family="system-ui, sans-serif" font-size="64" font-weight="800" fill="#f4efe3">WaxWing</text>
+  <rect x="522" y="330" width="230" height="36" rx="18" fill="none" stroke="#2b261c" stroke-width="2"/>
+  <text x="637" y="355" font-family="system-ui, sans-serif" font-size="19" font-weight="600" letter-spacing="4" fill="#b3a88f" text-anchor="middle">LOCAL STREAM STUDIO</text>
+
+  <text x="522" y="420" font-family="system-ui, sans-serif" font-size="24" fill="#b3a88f">
+    <tspan x="522" dy="0">&#8226; <tspan fill="#ffc63d" font-weight="700">Zero-backend</tspan> podcast &amp; live studio — runs in your browser</tspan>
+    <tspan x="522" dy="42">&#8226; <tspan fill="#ffc63d" font-weight="700">Magic links</tspan> for guests — no accounts, no servers</tspan>
+    <tspan x="522" dy="42">&#8226; Direct a 16:9 stage &amp; record <tspan fill="#ffc63d" font-weight="700">4K masters to your own disk</tspan></tspan>
+  </text>
+</svg>

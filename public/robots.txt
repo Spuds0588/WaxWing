@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://spuds0588.github.io/WaxWing/sitemap.xml

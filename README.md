@@ -1,5 +1,9 @@
 # WaxWing — Local Stream Studio
 
+> **🌐 Live studio — [spuds0588.github.io/WaxWing](https://spuds0588.github.io/WaxWing/)** ·
+> free, no sign-up, no backend. Open it on a desktop (Chrome/Edge) to start a
+> show as the host; send the invite link to guests on any device.
+
 A purely frontend, serverless, peer-to-peer podcasting and live-streaming studio.
 Inspired by the *Local Stream Studio* PRD in this repo: the real-time compositing
 of a cloud studio, plus the uncompressed local recording fidelity of a desktop
@@ -129,6 +133,18 @@ Vite is only a dev server / static bundler):
 | `device.js`     | Camera ladder + proxy track downscaling          |
 | `config.js`     | Constants                                        |
 | `util.js`       | DOM/format helpers                               |
+
+## Roadmap
+
+- **Agentic studio sessions via WebMCP** *(planned)* — expose WaxWing's actions
+  as [WebMCP](https://zuplo.com/blog/what-is-webmcp) tools (the W3C-proposed
+  **Web Model Context Protocol** for browser-native agent tools) so an AI agent
+  working inside the tab can: create a studio session, mint **host & guest magic
+  links** for its user, monitor recording state, and organize/download finished
+  recordings on the user's behalf. WaxWing stays zero-backend — the WebMCP tool
+  layer runs in the same static app.
+- **Direct-to-platform streaming** (WHIP/RTMP bridge) and **cloud sync**
+  (Drive/OneDrive) per the original PRD's V2/V3 scope.
 
 ## License
 

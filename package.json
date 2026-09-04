@@ -11,7 +11,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "bun test tests/unit",
     "test:unit": "bun test tests/unit",
-    "test:e2e": "bun run build && bunx playwright test"
+    "test:e2e": "bun run build && bunx playwright test",
+    "og:gen": "node scripts/gen-og.mjs"
   },
   "dependencies": {
     "peerjs": "^1.5.5"
