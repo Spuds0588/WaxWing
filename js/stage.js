@@ -8,9 +8,16 @@
 
 import { STAGE } from "./config.js";
 import { el, clamp, coverCrop, containCrop } from "./util.js";
+import { WW_MARK_PATH, hexToRgb } from "./theme.js";
 
 const pad = STAGE.padding;
 const INSET = pad; // outer margin of the whole arrangement
+
+// rgba() version of a hex color (for canvas strokes/fills at alpha).
+function hexSoft(hex, a) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
 
 export function autoRects(count) {
   const g = pad; // gap between tiles
@@ -53,6 +60,49 @@ export function autoRects(count) {
 // tiles drop into a single-row strip beneath — the "this is what we're
 // watching" arrangement. With no cameras the screens take the whole stage.
 // Returns { screens: [...rects], cams: [...rects] } in join order.
+export function gridRects(count) {
+  const g = pad;
+  const make = (x, y, w, h) => ({ x, y, w, h });
+  if (count <= 1) return autoRects(count);
+  const cols = Math.min(2, count);
+  const rows = Math.ceil(count / cols);
+  const innerW = 1 - 2 * INSET - (cols - 1) * g;
+  const innerH = 1 - 2 * INSET - (rows - 1) * g;
+  const cw = innerW / cols;
+  const ch = innerH / rows;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const c = i % cols;
+    const r = Math.floor(i / cols);
+    out.push(make(INSET + c * (cw + g), INSET + r * (ch + g), cw, ch));
+  }
+  return out;
+}
+
+// Spotlight template: one "featured" tile owns the left two-thirds of the
+// stage, everyone else stacks in a column on the right — the classic
+// podcast/panel look. Focus defaults to the first participant (the host).
+export function spotlightRects(count, focus = 0) {
+  const g = pad;
+  const make = (x, y, w, h) => ({ x, y, w, h });
+  if (count <= 1) return autoRects(count);
+  const focusW = (1 - 2 * INSET) * 0.62;
+  const focusR = make(INSET, INSET, focusW, 1 - 2 * INSET);
+  const sideX = INSET + focusW + g;
+  const sideW = 1 - 2 * INSET - focusW - g;
+  const sideN = count - 1;
+  const sideH = (1 - 2 * INSET - (sideN - 1) * g) / sideN;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    if (i === focus) {
+      out.push(focusR);
+      continue;
+    }
+    const idx = i < focus ? i : i - 1;
+    out.push(make(sideX, INSET + idx * (sideH + g), sideW, sideH));
+  }
+  return out;
+}
 export function mixedRects(screenCount, camCount) {
   const g = pad;
   const make = (x, y, w, h) => ({ x, y, w, h });
@@ -79,6 +129,54 @@ export function mixedRects(screenCount, camCount) {
   return { screens, cams };
 }
 
+// Full stage layout for a set of participants that may mix shared screens
+// and cameras. Screens are the "what we're watching" content, so they always
+// get the prominent cells (top band for auto, first grid cells, first
+// spotlight slot) while cameras fill in around them — the head-to-head
+// Twitch look for multiple simultaneous shares.
+//
+// Returns { rects, presentation, focus } where `rects` maps every key to its
+// normalized rect, `presentation` is the keys ordered screens-first, and
+// `focus` is the effective spotlight target (or null). Pure — unit tested.
+export function layoutRects(keys, isScreen, template = "auto", templateRects = null, focusKey = null) {
+  const g = pad;
+  const make = (x, y, w, h) => ({ x, y, w, h });
+  const screens = keys.filter((k) => isScreen(k));
+  const cams = keys.filter((k) => !isScreen(k));
+  const pres = [...screens, ...cams];
+  const n = pres.length;
+
+  let base = [];
+  let focus = null;
+  if (template === "grid") {
+    base = gridRects(n);
+  } else if (template === "spotlight") {
+    // Default the spotlight to the first shared screen (the presenter's
+    // view wins); the host can click any tile to retarget it.
+    focus = focusKey && pres.includes(focusKey) ? focusKey : screens[0] || pres[0] || null;
+    base = spotlightRects(n, focus ? pres.indexOf(focus) : 0);
+  } else if (template === "custom" && templateRects?.length) {
+    // Positional saved arrangement over the presentation order; extra
+    // joiners fall back to their auto slot so a new share still lands
+    // somewhere visible instead of stacking on top of a tile.
+    const auto = autoRects(n);
+    base = pres.map((_, i) => templateRects[i] || auto[i]);
+  } else if (screens.length) {
+    const mixed = mixedRects(screens.length, cams.length);
+    base = [...mixed.screens, ...mixed.cams];
+  } else {
+    base = autoRects(n);
+  }
+
+  const rects = new Map();
+  pres.forEach((key, i) => {
+    if (base[i]) rects.set(key, base[i]);
+  });
+  // Any key layoutRects didn't place (shouldn't happen) still gets a tile.
+  for (const key of keys) if (!rects.has(key)) rects.set(key, make(INSET, INSET, 0.5, 0.5));
+  return { rects, presentation: pres, focus };
+}
+
 export class Stage {
   /**
    * @param {object} opts
@@ -91,7 +189,13 @@ export class Stage {
     this.ctx = canvas?.getContext("2d");
     this.entries = new Map(); // key -> { key, label, isSelf, tileEl, videoEl }
     this.order = []; // join order of keys
-    this.custom = new Map(); // key -> { x, y, w, h } normalized
+    this.custom = new Map(); // key -> { x, y, w, h } normalized (drag tweaks)
+    this.template = "auto"; // auto | grid | spotlight | custom
+    this.templateRects = null; // saved arrangement (positional, presentation order)
+    this.focusKey = null; // spotlight target (null = first screen / first tile)
+    this.theme = null; // theme object consumed by draw()
+    this._bgImg = null; // cached background image for the canvas
+    this._logoImg = null; // cached logo image for the canvas
     this.interactive = true; // host drag/resize enabled
     this._raf = null;
     this._required = false; // composer consumers: guests / fallback recording
@@ -128,6 +232,18 @@ export class Stage {
     const handle = el("div", { class: "tile-handle", title: "Drag to move" });
     const grip = el("div", { class: "tile-grip", title: "Drag to resize" });
     tile.append(video, tag, handle, grip);
+    // Spotlight: clicking a tile (not dragging it) retargets the featured
+    // tile — "whoever I click becomes the big one", like a director cutting
+    // to a presenter. Works for screens and cameras alike.
+    tile.addEventListener("click", (e) => {
+      if (!this.interactive || this.template !== "spotlight") return;
+      if (e.target.closest(".tile-handle") || e.target.closest(".tile-grip")) return;
+      if (tile.dataset.dragged) {
+        delete tile.dataset.dragged; // click tail of a drag, not a tap
+        return;
+      }
+      this.setFocus(key);
+    });
     // Listeners / no-camera joins: no video element content to show — render
     // a name-tile placeholder instead of a black box labeled "connecting…".
     if (!hasVideo) {
@@ -151,12 +267,6 @@ export class Stage {
     this.container.append(tile);
     this.entries.set(key, { key, label, isSelf, hasVideo, hasAudio, isScreen, tileEl: tile, videoEl: video, tagEl: tag });
     this.order.push(key);
-    if (isScreen || (this.order.some((k) => this.entries.get(k)?.isScreen) && !this.custom.size)) {
-      // Entering presentation mode: drop manual arrangement so the cameras
-      // fall into the strip and screens own the band. (Empty customs only —
-      // a host fine-tuning mid-presentation keeps their tweaks.)
-      this.custom.clear();
-    }
     if (this.interactive) this.wireTileInteractions(tile, key);
     this.syncDom();
     return this.entries.get(key);
@@ -170,11 +280,6 @@ export class Stage {
     this.entries.delete(key);
     this.custom.delete(key);
     this.order = this.order.filter((k) => k !== key);
-    if (this.order.some((k) => this.entries.get(k)?.isScreen)) {
-      // still in presentation mode — keep the auto layout
-    } else {
-      this.custom.clear(); // left presentation mode
-    }
     this.syncDom();
   }
 
@@ -201,17 +306,9 @@ export class Stage {
 
   getRects() {
     const isScreenKey = (k) => this.entries.get(k)?.isScreen === true;
-    const screens = this.order.filter(isScreenKey);
-    const cams = this.order.filter((k) => !isScreenKey(k));
-    const layout =
-      screens.length > 0
-        ? mixedRects(screens.length, cams.length)
-        : { screens: [], cams: autoRects(cams.length) };
-    const baseFor = new Map();
-    cams.forEach((key, i) => baseFor.set(key, layout.cams[i]));
-    screens.forEach((key, i) => baseFor.set(key, layout.screens[i]));
+    const { rects } = layoutRects(this.order, isScreenKey, this.template, this.templateRects, this.focusKey);
     return this.order.map((key) => {
-      const base = baseFor.get(key);
+      const base = rects.get(key) || { x: INSET, y: INSET, w: 1 - 2 * INSET, h: 1 - 2 * INSET };
       const custom = this.custom.get(key);
       return {
         key,
@@ -224,6 +321,30 @@ export class Stage {
         isScreen: this.entries.get(key)?.isScreen || false,
       };
     });
+  }
+
+  // The tile the spotlight layout features (host clicks any tile to retarget
+  // it). Defaults to the first shared screen, then the first participant.
+  getFocusKey() {
+    const isScreenKey = (k) => this.entries.get(k)?.isScreen === true;
+    const screens = this.order.filter(isScreenKey);
+    return this.focusKey || screens[0] || this.order[0] || null;
+  }
+
+  setFocus(key) {
+    if (!this.entries.has(key)) return;
+    this.focusKey = key;
+    this.syncDom();
+  }
+
+  // Switches the stage template (auto / grid / spotlight / custom) and drops
+  // any drag tweaks from the previous layout. The rects parameter carries the
+  // saved arrangement for the custom template.
+  applyTemplate(name, rects = null) {
+    this.template = name || "auto";
+    this.templateRects = rects;
+    this.custom.clear();
+    this.syncDom();
   }
 
   resetLayout() {
@@ -258,6 +379,7 @@ export class Stage {
       } else if (mode === "resize") {
         r = { ...rect, w: clamp(rect.w + dx, 0.1, 1), h: clamp(rect.h + dy, 0.1, 1) };
       }
+      tile.dataset.dragged = "1";
       this.custom.set(key, r);
       this.syncDom();
     };
@@ -322,18 +444,82 @@ export class Stage {
 
   drawIdle() {
     if (!this.ctx) return;
-    this.ctx.fillStyle = "#05060a";
+    this.ctx.fillStyle = this.theme?.background?.color || "#05060a";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  // The composer draws whatever the host's theme says: background, accent
+  // colors, element toggles, and the logo/watermark — so guests and the
+  // canvas-fallback Director's Cut see exactly the themed stage.
+  setTheme(theme) {
+    this.theme = theme || null;
+    const bg = this.theme?.background;
+    if (bg?.kind === "image" && bg.image) {
+      const img = new Image();
+      img.src = bg.image;
+      img.onload = () => {
+        this._bgImg = img;
+        if (this._raf) this.draw();
+      };
+    } else {
+      this._bgImg = null;
+    }
+    const logo = this.theme?.logo;
+    if (logo?.enabled && logo.dataUrl) {
+      const img = new Image();
+      img.src = logo.dataUrl;
+      img.onload = () => {
+        this._logoImg = img;
+        if (this._raf) this.draw();
+      };
+    } else {
+      this._logoImg = null;
+    }
+    if (this._raf) this.draw();
   }
 
   draw() {
     if (!this.ctx) return;
     const W = this.canvas.width;
     const H = this.canvas.height;
-    this.ctx.fillStyle = "#05060a";
-    this.ctx.fillRect(0, 0, W, H);
+    const th = this.theme;
+    const accent = th?.accent || "#ffc63d";
+    const bg = th?.background;
+
+    if (bg?.kind === "image" && this._bgImg?.complete) {
+      this.ctx.fillStyle = bg.color || "#080705";
+      this.ctx.fillRect(0, 0, W, H);
+      const f = coverCrop(W, H, this._bgImg.naturalWidth, this._bgImg.naturalHeight);
+      this.ctx.drawImage(this._bgImg, f.dx, f.dy, f.dw, f.dh);
+    } else if (bg?.kind === "gradient") {
+      const a = ((bg.angle || 160) * Math.PI) / 180;
+      const len = Math.abs(H * Math.sin(a)) + Math.abs(W * Math.cos(a));
+      const g = this.ctx.createLinearGradient(
+        (W - len * Math.cos(a)) / 2,
+        (H - len * Math.sin(a)) / 2,
+        (W + len * Math.cos(a)) / 2,
+        (H + len * Math.sin(a)) / 2,
+      );
+      g.addColorStop(0, bg.from);
+      g.addColorStop(1, bg.to);
+      this.ctx.fillStyle = g;
+      this.ctx.fillRect(0, 0, W, H);
+    } else if (bg?.kind === "radial") {
+      const g = this.ctx.createRadialGradient(W * 0.5, 0, 0, W * 0.5, 0, Math.max(W, H) * 0.85);
+      g.addColorStop(0, bg.from);
+      g.addColorStop(1, bg.to);
+      this.ctx.fillStyle = g;
+      this.ctx.fillRect(0, 0, W, H);
+    } else {
+      this.ctx.fillStyle = bg?.color || "#05060a";
+      this.ctx.fillRect(0, 0, W, H);
+    }
+
     const rects = this.getRects();
     if (rects.length === 0) return;
+    const showNames = th?.showNames !== false;
+    const showChips = th?.showChips !== false;
+    const focusKey = this.template === "spotlight" ? this.getFocusKey() : null;
 
     for (const r of rects) {
       const entry = this.entries.get(r.key);
@@ -368,17 +554,17 @@ export class Stage {
           const initials = String(label).trim().slice(0, 2).toUpperCase() || "?";
           const avatarR = Math.min(pw, ph) * 0.16;
           this.ctx.fillStyle = entry?.hasAudio
-            ? "rgba(255,198,61,0.16)"
+            ? hexSoft(accent, 0.16)
             : "rgba(255,255,255,0.07)";
           this.ctx.beginPath();
           this.ctx.arc(px + pw / 2, py + ph * 0.44, avatarR, 0, Math.PI * 2);
           this.ctx.fill();
           this.ctx.strokeStyle = entry?.hasAudio
-            ? "rgba(255,198,61,0.4)"
+            ? hexSoft(accent, 0.4)
             : "rgba(255,255,255,0.18)";
           this.ctx.lineWidth = 1.5;
           this.ctx.stroke();
-          this.ctx.fillStyle = entry?.hasAudio ? "#ffc63d" : "#8a8371";
+          this.ctx.fillStyle = entry?.hasAudio ? accent : "#8a8371";
           this.ctx.font = `700 ${avatarR * 0.9}px system-ui, sans-serif`;
           this.ctx.textAlign = "center";
           this.ctx.textBaseline = "middle";
@@ -399,35 +585,86 @@ export class Stage {
         }
       }
 
-      // name tag, baked into the broadcast
-      const tagH = Math.max(18, ph * 0.08);
-      this.ctx.font = `600 ${tagH * 0.52}px system-ui, sans-serif`;
-      const labelWidth = this.ctx.measureText(r.label).width || tagH * 2;
-      const tagW = Math.min(pw, labelWidth + tagH * 2.1 + 60);
-      this.ctx.fillStyle = "rgba(5,6,10,0.62)";
-      this.ctx.fillRect(px, py, tagW, tagH);
-      this.ctx.fillStyle = r.isSelf ? "#ffc63d" : "#ffffff";
-      this.ctx.textBaseline = "middle";
-      this.ctx.fillText(r.label, px + tagH * 0.55, py + tagH / 2 + 1);
-      if (r.isScreen && px + tagW + tagH * 3 < px + pw) {
-        // "SCREEN" chip to the right of the name, like the DOM tile.
-        const text = "SCREEN";
-        const chipW = this.ctx.measureText(text).width + tagH * 1.15;
-        this.ctx.fillStyle = "#ffc63d";
-        this.ctx.beginPath();
-        this.ctx.roundRect ? this.ctx.roundRect(px + tagW + tagH * 0.3, py, chipW, tagH, tagH / 2) : this.ctx.rect(px + tagW + tagH * 0.3, py, chipW, tagH);
-        this.ctx.fill();
-        this.ctx.fillStyle = "#0c0b08";
-        this.ctx.fillText(text, px + tagW + tagH * 0.3 + tagH * 0.55, py + tagH / 2 + 1);
+      // name tag, baked into the broadcast (toggleable via the theme)
+      if (showNames) {
+        const tagH = Math.max(18, ph * 0.08);
+        this.ctx.font = `600 ${tagH * 0.52}px system-ui, sans-serif`;
+        const labelWidth = this.ctx.measureText(r.label).width || tagH * 2;
+        const tagW = Math.min(pw, labelWidth + tagH * 2.1 + 60);
+        this.ctx.fillStyle = "rgba(5,6,10,0.62)";
+        this.ctx.fillRect(px, py, tagW, tagH);
+        this.ctx.fillStyle = r.isSelf ? accent : "#ffffff";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillText(r.label, px + tagH * 0.55, py + tagH / 2 + 1);
+        if (showChips && r.isScreen && px + tagW + tagH * 3 < px + pw) {
+          // "SCREEN" chip to the right of the name, like the DOM tile.
+          const text = "SCREEN";
+          const chipW = this.ctx.measureText(text).width + tagH * 1.15;
+          this.ctx.fillStyle = accent;
+          this.ctx.beginPath();
+          this.ctx.roundRect ? this.ctx.roundRect(px + tagW + tagH * 0.3, py, chipW, tagH, tagH / 2) : this.ctx.rect(px + tagW + tagH * 0.3, py, chipW, tagH);
+          this.ctx.fill();
+          this.ctx.fillStyle = "#0c0b08";
+          this.ctx.fillText(text, px + tagW + tagH * 0.3 + tagH * 0.55, py + tagH / 2 + 1);
+        }
       }
       this.ctx.restore();
 
-      this.ctx.strokeStyle = r.isSelf ? "rgba(255,198,61,0.85)" : "rgba(255,255,255,0.14)";
-      this.ctx.lineWidth = r.isSelf ? 3 : 1;
+      const featured = r.key === focusKey || r.isSelf;
+      this.ctx.strokeStyle = featured ? hexSoft(accent, 0.85) : "rgba(255,255,255,0.14)";
+      this.ctx.lineWidth = featured ? 3 : 1;
       this.ctx.beginPath();
       this.ctx.roundRect(px, py, pw, ph, radius);
       this.ctx.stroke();
+      if (r.key === focusKey && !r.isSelf) {
+        // A "spotlighting this" ring so the audience can see the cut target.
+        this.ctx.strokeStyle = hexSoft(accent, 0.45);
+        this.ctx.lineWidth = 1.5;
+        this.ctx.setLineDash([6, 6]);
+        this.ctx.beginPath();
+        this.ctx.roundRect(px - 3, py - 3, pw + 6, ph + 6, radius + 3);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+      }
     }
+
+    this.drawWatermark(accent);
+  }
+
+  // Logo / waxwing watermark stamped into the broadcast, per the theme's
+  // corner + size. The built-in mark is drawn as a Path2D in the accent
+  // color so it stays crisp at any canvas resolution.
+  drawWatermark(accent) {
+    const th = this.theme;
+    if (!th) return;
+    const logo = th.logo || {};
+    const useLogo = logo.enabled && logo.dataUrl && this._logoImg?.complete;
+    if (!useLogo && th.showWatermark === false) return;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const size = Math.max(24, (logo.size || 0.13) * W);
+    const margin = Math.max(14, W * 0.02);
+    const pos = logo.pos || "br";
+    const xFor = { tl: margin, tr: W - size - margin, bl: margin, br: W - size - margin, bc: (W - size) / 2 };
+    const yFor = { tl: margin, tr: margin, bl: H - size - margin, br: H - size - margin, bc: H - size - margin };
+    const x = xFor[pos] ?? xFor.br;
+    const y = yFor[pos] ?? yFor.br;
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.9;
+    if (useLogo) {
+      const iw = this._logoImg.naturalWidth || 1;
+      const ih = this._logoImg.naturalHeight || 1;
+      this.ctx.drawImage(this._logoImg, x, y, size, size * (ih / iw));
+    } else {
+      const pw = size * 0.5;
+      const ph = pw * (38.38 / 47.55);
+      this.ctx.translate(x + (size - pw) / 2, y + (size - ph) / 2);
+      this.ctx.scale(pw / 47.55, ph / 38.38);
+      this.ctx.translate(-821.53, -793.74);
+      this.ctx.fillStyle = accent;
+      this.ctx.fill(new Path2D(WW_MARK_PATH));
+    }
+    this.ctx.restore();
   }
 
   roundRect(x, y, w, h, r) {

@@ -44,6 +44,7 @@
     <link rel="icon" href="./favicon.png" sizes="any" type="image/png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/theme.css" />
 
     <!-- AEO: structured data for search & answer engines -->
     <script type="application/ld+json">
@@ -63,7 +64,9 @@
         "Up to 4 participants (1 host, 3 guests)",
         "Guest magic links — no sign-up",
         "Draggable 16:9 stage with auto layouts",
-        "Live screen sharing — present a tab, window, or screen as its own stage tile",
+        "Live screen sharing — multiple simultaneous screens, each its own tile with host-picked head-to-head layouts",
+        "Custom studio themes — backgrounds, logos, accent colors, and element toggles",
+        "Stage templates with custom arrangements (auto, grid, spotlight)",
         "Records full-quality 4K masters locally to disk",
         "Post-show peer-to-peer file sync",
         "1080p Director's Cut region capture",
@@ -251,6 +254,11 @@
             <h4>Files come to you</h4>
             <p>When the show stops, each guest&rsquo;s high-res master is streamed peer-to-peer into your folder. Everything lands in one place.</p>
           </article>
+          <article class="feat">
+            <span class="feat-ico"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.7-.77 1.7-1.7 0-.42-.15-.8-.4-1.1-.25-.3-.4-.68-.4-1.1 0-.93.77-1.7 1.7-1.7h2.4c2.73 0 4.9-2.17 4.9-4.9C22 6.03 17.53 2 12 2z"/></svg></span>
+            <h4>Make it yours</h4>
+            <p>Upload a background and logo, recolor the stage accents, hide or show name tags and chips, and save custom tile arrangements as templates &mdash; baked into the broadcast and your Director&rsquo;s Cut.</p>
+          </article>
         </div>
       </section>
 
@@ -345,6 +353,14 @@
 
       <div id="hostControls" class="host-controls hidden">
         <button
+          id="btnTheme"
+          class="btn btn-ghost btn-icon"
+          title="Studio theme — background, logo, colors, layout"
+          aria-label="Studio theme"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.7-.77 1.7-1.7 0-.42-.15-.8-.4-1.1-.25-.3-.4-.68-.4-1.1 0-.93.77-1.7 1.7-1.7h2.4c2.73 0 4.9-2.17 4.9-4.9C22 6.03 17.53 2 12 2z"/></svg>
+        </button>
+        <button
           id="btnShareScreen"
           class="btn btn-ghost btn-share hidden"
           title="Share your screen"
@@ -389,6 +405,17 @@
               <span class="empty-sub">Share the room code to bring people on stage.</span>
             </div>
           </div>
+        </div>
+
+        <!-- Host layout quick bar: appears while shared screens are live so
+             the host can cut between Auto / Grid (head-to-head) / Spotlight /
+             Custom without opening the theme panel. -->
+        <div id="stageLayoutBar" class="stage-layout-bar hidden" aria-label="Stage layout for shared screens">
+          <span class="layout-bar-label">Screens</span>
+          <button type="button" class="layout-chip" data-layout="auto" title="Screens on top, cameras below">Auto</button>
+          <button type="button" class="layout-chip" data-layout="grid" title="Every screen equal — head-to-head">Grid</button>
+          <button type="button" class="layout-chip" data-layout="spotlight" title="One screen featured — click a tile to choose">Spotlight</button>
+          <button type="button" class="layout-chip" data-layout="custom" title="Your saved arrangement">Custom</button>
         </div>
 
         <!-- Guest overlays (self-view pip, audio unlock, full screen) -->
@@ -547,6 +574,116 @@
               <span id="btnEnterLabel">Enter the studio</span>
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Studio theme (host only) ============ -->
+    <div id="themeModal" class="modal-backdrop hidden">
+      <div class="modal theme-modal">
+        <div class="modal-head">
+          <h2>Studio theme</h2>
+          <button id="btnThemeClose" class="btn btn-ghost btn-icon" title="Close" aria-label="Close theme panel">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+        <div id="themePanel" class="theme-grid">
+          <section class="theme-sec">
+            <h3>Stage layout</h3>
+            <div class="tpl-row" role="radiogroup" aria-label="Stage template">
+              <button type="button" class="tpl-chip" data-tpl="auto">Auto</button>
+              <button type="button" class="tpl-chip" data-tpl="grid">Grid</button>
+              <button type="button" class="tpl-chip" data-tpl="spotlight">Spotlight</button>
+              <button type="button" class="tpl-chip" data-tpl="custom">Custom</button>
+            </div>
+            <div class="theme-actions">
+              <button id="btnSaveArrangement" class="btn btn-outline" type="button">Save current arrangement</button>
+              <button id="btnResetAuto" class="btn btn-ghost" type="button">Auto-layout</button>
+            </div>
+            <p class="muted small theme-note">Drag and resize tiles on the stage to build a custom arrangement, then save it as a template. With shared screens live, Grid gives every screen an equal slot (head-to-head), Spotlight features one — click any tile to choose it — and the quick bar on the stage switches layouts without opening this panel.</p>
+          </section>
+
+          <section class="theme-sec">
+            <h3>Background</h3>
+            <div class="swatch-row" id="bgSwatches"></div>
+            <div class="theme-actions">
+              <label class="color-field"><span>Custom</span><input type="color" id="bgCustom" aria-label="Custom background color" /></label>
+              <input type="file" id="bgFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="file-input hidden" />
+              <button id="btnBgUpload" class="btn btn-outline" type="button">Upload image</button>
+              <button id="btnBgRemove" class="btn btn-ghost hidden" type="button">Remove</button>
+            </div>
+          </section>
+
+          <section class="theme-sec">
+            <h3>Accent color</h3>
+            <div class="swatch-row" id="accentSwatches"></div>
+            <div class="theme-actions">
+              <label class="color-field"><span>Custom</span><input type="color" id="accentCustom" aria-label="Custom accent color" /></label>
+            </div>
+            <p class="muted small theme-note">Accent drives the host chip, screen chips, tile focus, and the watermark.</p>
+          </section>
+
+          <section class="theme-sec">
+            <h3>Logo</h3>
+            <div class="theme-actions">
+              <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="file-input hidden" />
+              <button id="btnLogoUpload" class="btn btn-outline" type="button">Upload logo</button>
+              <button id="btnLogoRemove" class="btn btn-ghost hidden" type="button">Remove</button>
+            </div>
+            <label class="switch-row">
+              <svg viewBox="0 0 24 24" width="16" height="16" class="switch-ico" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l-7 4 3-7-6-4h8l2-7 2 7h8l-6 4 3 7z"/></svg>
+              <span class="switch-label">Show uploaded logo</span>
+              <input type="checkbox" id="logoEnabled" class="switch-input" />
+              <span class="switch-ui" aria-hidden="true"></span>
+              <span class="switch-state" data-on="On" data-off="Off">On</span>
+            </label>
+            <div class="theme-range-row">
+              <label class="color-field" for="logoSize"><span>Size</span></label>
+              <input type="range" id="logoSize" min="5" max="30" step="1" value="13" aria-label="Logo size" />
+            </div>
+            <div class="theme-actions">
+              <label class="color-field"><span>Position</span>
+                <select id="logoPos">
+                  <option value="tl">Top left</option>
+                  <option value="tr">Top right</option>
+                  <option value="bl">Bottom left</option>
+                  <option value="br" selected>Bottom right</option>
+                  <option value="bc">Bottom center</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="theme-sec">
+            <h3>Stage elements</h3>
+            <div class="toggle-grid">
+              <label class="switch-row">
+                <span class="switch-label">Name tags</span>
+                <input type="checkbox" id="optNames" class="switch-input" />
+                <span class="switch-ui" aria-hidden="true"></span>
+                <span class="switch-state" data-on="On" data-off="Off">On</span>
+              </label>
+              <label class="switch-row">
+                <span class="switch-label">Role chips</span>
+                <input type="checkbox" id="optChips" class="switch-input" />
+                <span class="switch-ui" aria-hidden="true"></span>
+                <span class="switch-state" data-on="On" data-off="Off">On</span>
+              </label>
+              <label class="switch-row">
+                <span class="switch-label">WaxWing watermark</span>
+                <input type="checkbox" id="optWatermark" class="switch-input" />
+                <span class="switch-ui" aria-hidden="true"></span>
+                <span class="switch-state" data-on="On" data-off="Off">On</span>
+              </label>
+              <label class="switch-row">
+                <span class="switch-label">Accent frame</span>
+                <input type="checkbox" id="optFrame" class="switch-input" />
+                <span class="switch-ui" aria-hidden="true"></span>
+                <span class="switch-state" data-on="On" data-off="Off">On</span>
+              </label>
+            </div>
+            <p class="muted small theme-note">Everything here is baked into the broadcast and the Director's Cut — guests see exactly what you arrange.</p>
+          </section>
         </div>
       </div>
     </div>

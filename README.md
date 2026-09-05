@@ -113,11 +113,16 @@ Anyone in the studio can present: hit **Share** in the top bar and the
 browser picker offers a tab, a window, or the whole screen. The share travels
 as its **own media stream** — separate from the presenter's camera proxy — and
 arrives on the host's stage as a dedicated **SCREEN** tile (letterboxed, so
-slides are never cropped). The stage flips into a presentation layout: shared
-screens own the top band, cameras drop into a strip beneath. Because the tile
-lives in the composer, every guest sees it in the broadcast and it is baked
-into the **Director's Cut** recording (both the DOM region capture and the
-canvas fallback draw it). Tab audio, when the source offers it, joins the mix
+slides are never cropped). **Multiple people can share at the same time** —
+each share is its own tile, so a co-stream lands head-to-head like a Twitch
+split. The host picks the layout from the quick bar that appears on the stage:
+**Auto** (screens own the top band, cameras strip below), **Grid** (every
+screen an equal slot — head-to-head), **Spotlight** (one screen featured;
+click any tile to retarget it), or **Custom** (drag/resize the screens like
+any other tile and save the arrangement). Because every tile lives in the
+composer, guests see it in the broadcast and it is baked into the
+**Director's Cut** recording (both the DOM region capture and the canvas
+fallback draw it). Tab audio, when the source offers it, joins the mix
 under the sharer's ownership — heard by the audience and recorded, but never
 looped back to the sharer (a shared screen's audio is excluded from its
 owner's own stage bus and the host's own screen is excluded from the host's
@@ -171,6 +176,31 @@ back into the auto layout. The same layout is composited onto a 1920×1080
 canvas that becomes the guests' broadcast (name tags baked in) and doubles as
 the Director's Cut source when Region Capture isn't available.
 
+### Studio themes (hosts)
+The **Theme** button (top bar, host only) restyles the stage — and with it
+the broadcast and the Director's Cut — without leaving the room:
+
+- **Backgrounds** — a set of warm-dark waxwing presets, any custom color, or
+  an uploaded image (PNG/JPEG/WebP/SVG; images are downscaled on upload so
+  they stay in browser storage).
+- **Logo** — upload your own mark (PNG/SVG recommended) or use the built-in
+  waxwing watermark; pick a corner, size, and on/off.
+- **Accent color** — drives the HOST chip, screen chips, tile focus, avatar
+  tiles, the stage frame, and the watermark tint. Light accents automatically
+  get dark chip text.
+- **Element toggles** — show/hide name tags, role chips, the watermark, and
+  the accent frame.
+- **Stage templates** — **Auto** (adaptive), **Grid** (equal 2-column,
+  head-to-head when shared screens are live), **Spotlight** (one tile owns
+  the left two-thirds, the rest stack right — click any tile to feature
+  it), and **Custom**: drag/resize tiles into any arrangement and hit
+  **Save current arrangement** to keep it as a template. Templates apply to
+  shared screens exactly like camera tiles.
+
+The theme is applied live to the host's stage and persisted per browser in
+localStorage; guests receive it baked into the composited video — no theme
+sync protocol needed.
+
 ### Audio
 A Web Audio mixer on the host builds one bus per guest containing every mic
 **except that guest's**, so nobody hears their own voice echoed back over the
@@ -213,16 +243,17 @@ Vite is only a dev server / static bundler):
 | `fs.js`         | File System Access wrapper (memory fallback)     |
 | `sync.js`       | Chunked P2P uploader                             |
 | `device.js`     | Camera ladder, screen share capture, proxy tracks |
+| `theme.js`      | Studio theme: model, persistence, uploads, DOM apply |
 | `config.js`     | Constants                                        |
 | `util.js`       | DOM/format helpers                               |
 
 ## Roadmap
 
-- **Session templates** *(planned, next)* — saved stage presets per show:
-  auto-layouts tuned for phone/mobile guests, a logo or watermark slot
-  between tiles, PNG/SVG backgrounds and gradients behind the stage, and
-  theme variations of the name tags and chips. Customization here matters as
-  much as stability and recording fidelity.
+- **Session templates, part two** *(planned)* — build on the shipped stage
+  templates with per-show saved presets: layouts tuned per guest-count and
+  device mix, position/size recall per participant, and template thumbnails.
+  Theme variants for the app chrome itself (topbar/sidebar tinting) and a
+  shared theme across rooms are next on the customization list.
 - **Agentic studio sessions via WebMCP** *(planned)* — expose WaxWing's actions
   as [WebMCP](https://zuplo.com/blog/what-is-webmcp) tools (the W3C-proposed
   **Web Model Context Protocol** for browser-native agent tools) so an AI agent

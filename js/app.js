@@ -29,6 +29,15 @@ import {
   rememberDeviceIds,
   stopStream,
 } from "./device.js";
+import {
+  BG_PRESETS,
+  ACCENT_PRESETS,
+  DEFAULT_THEME,
+  loadTheme,
+  saveTheme,
+  applyStageTheme,
+  fileToDataUrl,
+} from "./theme.js";
 import * as fs from "./fs.js";
 import { AudioBus } from "./audio-bus.js";
 import { Network, randomRoomCode } from "./network.js";
@@ -65,7 +74,12 @@ for (const id of [
   "dontClosePill", "dontCloseText", "fatalPanel", "fatalTitle", "fatalMessage",
   "btnFatalReload", "composerCanvas", "stageShell", "btnFullscreen",
   "orientHint", "optVideo", "optMic", "optSave", "saveLabel", "saveHint",
-  "saveRow", "folderWrap", "recChipState",
+  "saveRow", "folderWrap", "recChipState", "btnTheme", "themeModal",
+  "btnThemeClose", "themePanel", "bgSwatches", "bgCustom", "bgFile",
+  "btnBgUpload", "btnBgRemove", "accentSwatches", "accentCustom", "logoFile",
+  "btnLogoUpload", "btnLogoRemove", "logoEnabled", "logoPos", "logoSize",
+  "optNames", "optChips", "optWatermark", "optFrame", "btnSaveArrangement",
+  "btnResetAuto", "stageLayoutBar",
 ]) {
   els[id] = $(`#${id}`);
 }
@@ -218,6 +232,7 @@ function bootStudio() {
 
   // Wire static UI.
   els.btnEnter.addEventListener("click", handleEnter);
+  wireThemePanel();
   els.btnShareScreen.addEventListener("click", toggleShare);
   els.btnRefreshDevices.addEventListener("click", () => populateDeviceSelects().then(startCameraPreview));
   els.camSelect.addEventListener("change", startCameraPreview);
@@ -358,6 +373,258 @@ function syncMediaPrefs() {
       : "You'll run the show, but keep no local master yourself.";
   }
   els.saveHint.textContent = hint;
+}
+
+// ---- studio theme (backgrounds, logo, colors, elements, templates) --------
+
+// themeSet applies a mutation to S.theme, pushes it into the stage DOM and
+// the composer canvas, and persists it. The host's stage is the live
+// preview, so every panel change is immediately visible — and because the
+// composer reads the same theme, guests and the Director's Cut follow.
+function themeSet(mutate) {
+  if (!S.theme) S.theme = loadTheme();
+  mutate(S.theme);
+  applyTheme();
+  saveTheme(S.theme);
+}
+
+function applyTheme() {
+  if (!S.stage) return;
+  S.stage.setTheme(S.theme);
+  S.stage.applyTemplate(S.theme.template, S.theme.custom);
+  applyStageTheme(S.theme, els.stage);
+  refreshThemePanel();
+  refreshLayoutBar();
+}
+
+// The stage-layout quick bar: visible only while shared screens are live, so
+// the host can flip between Auto / Grid (head-to-head) / Spotlight / Custom
+// without opening the theme panel. Mirrors the theme panel's template chips.
+function refreshLayoutBar() {
+  if (!els.stageLayoutBar) return;
+  const host = S.role === "host";
+  const screenCount = host && S.stage ? S.stage.order.filter((k) => S.stage.entries.get(k)?.isScreen).length : 0;
+  els.stageLayoutBar.classList.toggle("hidden", !host || screenCount === 0);
+  if (host && S.theme) {
+    for (const btn of els.stageLayoutBar.querySelectorAll("[data-layout]")) {
+      btn.classList.toggle("active", btn.dataset.layout === S.theme.template);
+    }
+  }
+}
+
+function refreshThemePanel() {
+  if (!S.theme) return;
+  const t = S.theme;
+  for (const btn of els.themePanel.querySelectorAll("[data-tpl]")) {
+    btn.classList.toggle("active", btn.dataset.tpl === t.template);
+  }
+  for (const btn of els.bgSwatches.querySelectorAll("[data-bg]")) {
+    const p = BG_PRESETS.find((b) => b.key === btn.dataset.bg);
+    const active =
+      p &&
+      ((t.background.kind === "radial" && p.kind === "radial" && t.background.from === p.from && t.background.to === p.to) ||
+        (t.background.kind === "gradient" && p.kind === "gradient" && t.background.from === p.from && t.background.to === p.to) ||
+        (t.background.kind === "color" && p.kind === "color" && t.background.color === p.color));
+    btn.classList.toggle("active", Boolean(active));
+  }
+  for (const btn of els.accentSwatches.querySelectorAll("[data-accent]")) {
+    btn.classList.toggle("active", btn.dataset.accent === t.accent);
+  }
+  els.accentCustom.value = t.accent || DEFAULT_THEME.accent;
+  els.bgCustom.value =
+    t.background.kind === "color" ? t.background.color : DEFAULT_THEME.background.color;
+  els.logoEnabled.checked = Boolean(t.logo?.enabled);
+  els.logoPos.value = t.logo?.pos || "br";
+  els.logoSize.value = String(Math.round((t.logo?.size || 0.13) * 100));
+  els.optNames.checked = t.showNames !== false;
+  els.optChips.checked = t.showChips !== false;
+  els.optWatermark.checked = t.showWatermark !== false;
+  els.optFrame.checked = t.frame !== false;
+  els.btnLogoRemove.classList.toggle("hidden", !t.logo?.dataUrl);
+  els.btnBgRemove.classList.toggle("hidden", t.background.kind !== "image");
+}
+
+function wireThemePanel() {
+  // Host-only feature: the broadcast is the host's stage, so the panel
+  // lives with the host controls (hidden for guests by handleEnter).
+  els.btnTheme.addEventListener("click", () => els.themeModal.classList.remove("hidden"));
+  els.btnThemeClose.addEventListener("click", () => els.themeModal.classList.add("hidden"));
+  els.themeModal.addEventListener("click", (e) => {
+    if (e.target === els.themeModal) els.themeModal.classList.add("hidden");
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !els.themeModal.classList.contains("hidden")) {
+      els.themeModal.classList.add("hidden");
+    }
+  });
+
+  // Template chips (theme panel + the stage quick bar share the same wiring).
+  const wireTplChips = (btn) => {
+    btn.addEventListener("click", () => {
+      const tpl = btn.dataset.tpl || btn.dataset.layout;
+      themeSet((t) => {
+        t.template = tpl;
+        if (tpl !== "custom") t.custom = null;
+      });
+      notify(`Layout: ${tpl === "auto" ? "Auto" : tpl === "grid" ? "Grid (head-to-head)" : tpl === "spotlight" ? "Spotlight" : "Custom"}.`, "");
+    });
+  };
+  for (const btn of els.themePanel.querySelectorAll("[data-tpl]")) wireTplChips(btn);
+  for (const btn of els.stageLayoutBar.querySelectorAll("[data-layout]")) wireTplChips(btn);
+
+  // Save the host's current arrangement as a custom template.
+  els.btnSaveArrangement.addEventListener("click", () => {
+    if (!S.stage) return;
+    const rects = S.stage.getRects().map((r) => ({
+      x: Number(r.x.toFixed(4)),
+      y: Number(r.y.toFixed(4)),
+      w: Number(r.w.toFixed(4)),
+      h: Number(r.h.toFixed(4)),
+    }));
+    themeSet((t) => {
+      t.template = "custom";
+      t.custom = rects;
+    });
+    notify("Arrangement saved as the Custom template.", "success");
+  });
+  els.btnResetAuto.addEventListener("click", () => {
+    themeSet((t) => {
+      t.template = "auto";
+      t.custom = null;
+    });
+  });
+
+  // Background swatches + custom color + image upload.
+  buildSwatches(els.bgSwatches, BG_PRESETS, "bg");
+  for (const btn of els.bgSwatches.querySelectorAll("[data-bg]")) {
+    btn.addEventListener("click", () => {
+      const p = BG_PRESETS.find((b) => b.key === btn.dataset.bg);
+      if (!p) return;
+      themeSet((t) => {
+        t.background = p.kind === "color"
+          ? { kind: "color", color: p.color, from: p.from, to: p.to, angle: p.angle, image: null, imageLabel: "" }
+          : { kind: p.kind, from: p.from, to: p.to, angle: p.angle, color: p.color || "#080705", image: null, imageLabel: "" };
+      });
+    });
+  }
+  els.bgCustom.addEventListener("input", () => {
+    themeSet((t) => {
+      t.background = { kind: "color", color: els.bgCustom.value, from: "#241706", to: "#080705", angle: 160, image: null, imageLabel: "" };
+    });
+  });
+  els.btnBgUpload.addEventListener("click", () => els.bgFile.click());
+  els.btnBgRemove.addEventListener("click", () => {
+    themeSet((t) => {
+      const p = BG_PRESETS[0];
+      t.background = { ...p, image: null, imageLabel: "" };
+    });
+  });
+  els.bgFile.addEventListener("change", async () => {
+    const file = els.bgFile.files?.[0];
+    if (!file) return;
+    try {
+      const { dataUrl, label } = await fileToDataUrl(file, { maxDim: 1920 });
+      themeSet((t) => {
+        t.background = { ...t.background, kind: "image", image: dataUrl, imageLabel: label, color: t.background.color || "#080705" };
+      });
+      notify("Background image applied.", "success");
+    } catch (err) {
+      notify(err.message, "danger");
+    } finally {
+      els.bgFile.value = "";
+    }
+  });
+
+  // Accent swatches + custom.
+  buildSwatches(els.accentSwatches, ACCENT_PRESETS.map((c) => ({ key: c, color: c, kind: "color" })), "accent");
+  for (const btn of els.accentSwatches.querySelectorAll("[data-accent]")) {
+    btn.addEventListener("click", () => {
+      themeSet((t) => {
+        t.accent = btn.dataset.accent;
+      });
+    });
+  }
+  els.accentCustom.addEventListener("input", () => {
+    themeSet((t) => {
+      t.accent = els.accentCustom.value;
+    });
+  });
+
+  // Logo upload / removal / position / size / toggle.
+  els.btnLogoUpload.addEventListener("click", () => els.logoFile.click());
+  els.btnLogoRemove.addEventListener("click", () => {
+    themeSet((t) => {
+      t.logo = { ...t.logo, dataUrl: null, label: "" };
+    });
+  });
+  els.logoFile.addEventListener("change", async () => {
+    const file = els.logoFile.files?.[0];
+    if (!file) return;
+    try {
+      const { dataUrl, label } = await fileToDataUrl(file, { maxDim: 640, preferPng: /png|svg/i.test(file.type) });
+      themeSet((t) => {
+        t.logo = { ...t.logo, dataUrl, label, enabled: true };
+      });
+      notify("Logo applied — it's live on the stage and in the broadcast.", "success");
+    } catch (err) {
+      notify(err.message, "danger");
+    } finally {
+      els.logoFile.value = "";
+    }
+  });
+  els.logoEnabled.addEventListener("change", () => {
+    themeSet((t) => {
+      t.logo = { ...t.logo, enabled: els.logoEnabled.checked };
+    });
+  });
+  els.logoPos.addEventListener("change", () => {
+    themeSet((t) => {
+      t.logo = { ...t.logo, pos: els.logoPos.value };
+    });
+  });
+  els.logoSize.addEventListener("input", () => {
+    themeSet((t) => {
+      t.logo = { ...t.logo, size: Number(els.logoSize.value) / 100 };
+    });
+  });
+
+  // Element toggles.
+  const bindToggle = (input, key) => {
+    input.addEventListener("change", () => {
+      themeSet((t) => {
+        t[key] = input.checked;
+      });
+    });
+  };
+  bindToggle(els.optNames, "showNames");
+  bindToggle(els.optChips, "showChips");
+  bindToggle(els.optWatermark, "showWatermark");
+  bindToggle(els.optFrame, "frame");
+
+  refreshThemePanel();
+}
+
+// Renders the background / accent preset swatches into their containers.
+function buildSwatches(container, presets, kind) {
+  container.innerHTML = "";
+  for (const p of presets) {
+    const style =
+      kind === "bg"
+        ? p.kind === "color"
+          ? `background:${p.color}`
+          : `background:linear-gradient(150deg, ${p.from}, ${p.to})`
+        : `background:${p.color}`;
+    const btn = el("button", {
+      type: "button",
+      class: "swatch",
+      style,
+      title: p.label || p.key,
+      "aria-label": p.label || p.key,
+    });
+    if (kind === "bg") btn.dataset.bg = p.key;
+    else btn.dataset.accent = p.key;
+    container.append(btn);
+  }
 }
 
 // ---- camera preview (preflight, before you commit to entering) -----------
@@ -552,6 +819,7 @@ async function handleEnter() {
       els.btnResetLayout.hidden = true;
       els.btnStageRec.hidden = true;
       els.btnRecord.hidden = true;
+      els.btnTheme.hidden = true; // the broadcast carries the host's theme
       els.btnExitLabel.textContent = "Leave";
     }
     refreshShareControls();
@@ -603,6 +871,11 @@ async function setupHost() {
       });
       S.stage.setStream("self", S.masterStream);
     }
+
+    // Host-only studio theme: apply the saved look to the stage DOM and the
+    // composer canvas (guests receive it baked into the broadcast video).
+    S.theme = loadTheme();
+    applyTheme();
 
     // Audio mixer — the host is the star that mixes everyone.
     if (!S.bus) {
@@ -787,6 +1060,7 @@ function hostEvents(e) {
       S.stage.setStream(sk, e.stream);
       S.bus.addSource(sk, e.stream, e.key);
       updateComposerNeed();
+      refreshLayoutBar();
       break;
     }
     case "guest-screen-remove":
@@ -825,6 +1099,7 @@ function removeRemoteScreen(peerKey) {
   S.stage?.removeParticipant(sk);
   S.bus?.removeSource(sk);
   updateComposerNeed();
+  refreshLayoutBar();
 }
 
 async function toggleShare() {
@@ -882,6 +1157,7 @@ async function toggleShare() {
     // speakers (that would loop the tab back into itself).
     S.bus.addSource(sk, stream, "self");
     updateComposerNeed();
+    refreshLayoutBar();
   }
   S.shareActive = true;
   refreshShareControls();

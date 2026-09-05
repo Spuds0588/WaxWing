@@ -606,3 +606,257 @@ test("guest and host screen shares arrive as separate tiles, broadcast, and surv
   });
   expect(errors, `JS errors during screen-share session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
 });
+
+test("multiple guests share screens at once; the host cuts head-to-head layouts and it all records", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const { viewport, userAgent, isMobile, hasTouch, deviceScaleFactor } =
+    test.info().project.use;
+  const errors = [];
+  const mkCtx = async () => {
+    const ctx = await browser.newContext({
+      viewport, userAgent, isMobile, hasTouch, deviceScaleFactor,
+    });
+    await ctx.addInitScript((sig) => {
+      window.__WW_PEER__ = sig;
+    }, SIG);
+    await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
+    await ctx.addInitScript(CLAMP_GUM);
+    await ctx.addInitScript(DISPLAY_STUB);
+    return ctx;
+  };
+
+  const hostCtx = await mkCtx();
+  const guestCtxs = await Promise.all([mkCtx(), mkCtx()]);
+  try {
+    const host = await hostCtx.newPage();
+    const guests = [];
+    for (const ctx of guestCtxs) guests.push(await ctx.newPage());
+    for (const p of [host, ...guests]) {
+      p.on("pageerror", (e) => errors.push(String(e)));
+      p.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+    }
+
+    // Host enters the studio.
+    await host.goto("/");
+    await host.locator("#landing .land-hero [data-start]").click();
+    await host.fill("#nameInput", "Cut Master");
+    await host.click("#btnEnter");
+    await expect(host.locator("#welcomeModal")).toBeHidden();
+    const room = (await host.locator("#roomChipCode").textContent()).trim();
+
+    // Two guests join.
+    for (let i = 0; i < 2; i++) {
+      await guests[i].goto(`/?room=${room}`);
+      await guests[i].fill("#nameInput", i === 0 ? "P1" : "P2");
+      await guests[i].click("#btnEnter");
+      await expect(host.locator("#guestCountBadge")).toContainText(`${i + 1}/3`, { timeout: 30_000 });
+    }
+    for (const g of guests) {
+      await expect(g.locator("#connPill")).toContainText("On air", { timeout: 30_000 });
+    }
+
+    // The layout quick bar stays hidden until the first screen goes live.
+    await expect(host.locator("#stageLayoutBar")).toBeHidden();
+
+    // BOTH guests share: two independent SCREEN tiles land on the host stage.
+    await guests[0].click("#btnShareScreen");
+    await guests[1].click("#btnShareScreen");
+    await expect(host.locator("#stage .tile-screen")).toHaveCount(2, { timeout: 30_000 });
+    await expect(host.locator("#stage .tile-screen .tile-name")).toContainText(["P1", "P2"]);
+    await expect(host.locator("#stage .tile-screen .chip-screen")).toHaveCount(2);
+    // Every screen decodes.
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const videos = [...document.querySelectorAll("#stage .tile-screen video")];
+            return videos.length === 2 && videos.every((v) => v.videoWidth > 0 && !v.paused);
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    await expectNoOverflow(host);
+
+    // The quick bar appears (host only) with Auto active by default.
+    await expect(host.locator("#stageLayoutBar")).toBeVisible();
+    await expect(host.locator('#stageLayoutBar [data-layout="auto"]')).toHaveClass(/active/);
+
+    // Auto: screens own the top band, cameras below.
+    let geo = await host.evaluate(() => {
+      const rect = (sel) => document.querySelector(sel).getBoundingClientRect();
+      const s = rect("#stage .tile-screen");
+      const cam = rect("#stage .tile:not(.tile-screen)");
+      return { sb: s.bottom, ct: cam.top, sw: s.width };
+    });
+    expect(geo.sb).toBeLessThanOrEqual(geo.ct + 1);
+
+    // Grid: head-to-head — both screens side by side, equal, top row.
+    await host.click('#stageLayoutBar [data-layout="grid"]');
+    await expect(host.locator('#stageLayoutBar [data-layout="grid"]')).toHaveClass(/active/);
+    geo = await host.evaluate(() => {
+      const rs = [...document.querySelectorAll("#stage .tile-screen")].map((el) => el.getBoundingClientRect());
+      return { tops: rs.map((r) => r.top), widths: rs.map((r) => r.width), xs: rs.map((r) => r.x) };
+    });
+    expect(geo.tops[0]).toBeCloseTo(geo.tops[1], 0); // same row
+    expect(geo.widths[0]).toBeCloseTo(geo.widths[1], 0); // equal halves
+    expect(geo.xs[1]).toBeGreaterThan(geo.xs[0]); // side by side
+
+    // Spotlight: the first screen (P1) is featured by default.
+    await host.click('#stageLayoutBar [data-layout="spotlight"]');
+    let big = await host.evaluate(() => {
+      const rs = [...document.querySelectorAll("#stage .tile-screen")].map((el) => ({
+        name: el.querySelector(".tile-name").textContent.trim(),
+        w: el.getBoundingClientRect().width,
+      }));
+      const stage = document.querySelector("#stage").getBoundingClientRect().width;
+      return { rs, stage };
+    });
+    const bigName = big.rs.reduce((a, b) => (b.w > a.w ? b : a)).name;
+    expect(bigName).toBe("P1");
+    expect(big.rs.find((r) => r.name === "P1").w).toBeGreaterThan(big.stage * 0.5);
+
+    // The host taps the OTHER screen to retarget the spotlight (director cut).
+    await host.locator("#stage .tile-screen").filter({ hasText: "P2" }).click({ position: { x: 20, y: 20 } });
+    big = await host.evaluate(() => {
+      const rs = [...document.querySelectorAll("#stage .tile-screen")].map((el) => ({
+        name: el.querySelector(".tile-name").textContent.trim(),
+        w: el.getBoundingClientRect().width,
+      }));
+      const stage = document.querySelector("#stage").getBoundingClientRect().width;
+      return { rs, stage };
+    });
+    expect(big.rs.reduce((a, b) => (b.w > a.w ? b : a)).name).toBe("P2");
+    expect(big.rs.find((r) => r.name === "P2").w).toBeGreaterThan(big.stage * 0.5);
+    await expectNoOverflow(host);
+
+    // Custom still records cleanly with both shares live.
+    await host.click('#stageLayoutBar [data-layout="grid"]'); // head-to-head for the record round
+    await host.click("#btnRecord");
+    await expect(host.locator("#recChip")).toBeVisible();
+    await host.waitForTimeout(3000);
+    await host.click("#btnRecord");
+    await expect(host.locator("#syncModal")).toBeVisible({ timeout: 30_000 });
+    await expect(host.locator("#btnSyncClose")).toBeEnabled({ timeout: 120_000 });
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const rows = [...document.querySelectorAll("#syncList .sync-row")];
+            return rows.length === 2 && rows.every((r) => r.classList.contains("done"));
+          }),
+        { timeout: 90_000 },
+      )
+      .toBe(true);
+    await host.click("#btnSyncClose");
+    await expectNoOverflow(host);
+
+    // Guests close their own sync modals (they intercept pointer events).
+    for (const g of guests) {
+      await expect(g.locator("#btnSyncClose")).toBeEnabled({ timeout: 30_000 });
+      await g.click("#btnSyncClose");
+    }
+
+    // Both guests stop sharing: tiles leave, the quick bar hides itself.
+    await guests[0].click("#btnShareScreen");
+    await guests[1].click("#btnShareScreen");
+    await expect(host.locator("#stage .tile-screen")).toHaveCount(0, { timeout: 20_000 });
+    await expect(host.locator("#stageLayoutBar")).toBeHidden();
+    await expectNoOverflow(host);
+
+    expect(errors, `JS errors during multi-screen session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
+  } finally {
+    await hostCtx.close().catch(() => {});
+    for (const ctx of guestCtxs) await ctx.close().catch(() => {});
+  }
+});
+
+// The studio theme panel is host-side and live-applies to the stage DOM (the
+// same theme the composer bakes into the broadcast). This test drives the
+// panel like a user: background preset, accent color, element toggles, and a
+// template switch — asserting the stage follows each change and the panel
+// fits the phone.
+test("host can theme the stage: background, accent, toggles, template", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { viewport, userAgent, isMobile, hasTouch, deviceScaleFactor } =
+    test.info().project.use;
+  const hostCtx = await browser.newContext({
+    viewport, userAgent, isMobile, hasTouch, deviceScaleFactor,
+  });
+  await hostCtx.addInitScript((sig) => {
+    window.__WW_PEER__ = sig;
+  }, SIG);
+  await hostCtx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
+  await hostCtx.addInitScript(CLAMP_GUM);
+  const errors = [];
+
+  try {
+    const host = await hostCtx.newPage();
+    host.on("pageerror", (e) => errors.push(String(e)));
+    host.on("console", (m) => {
+      if (m.type() === "error") errors.push(m.text());
+    });
+
+    // Host enters the studio (self tile only — themes don't need guests).
+    await host.goto("/");
+    await host.locator("#landing .land-hero [data-start]").click();
+    await host.fill("#nameInput", "Theme Host");
+    await host.click("#btnEnter");
+    await expect(host.locator("#welcomeModal")).toBeHidden();
+    await expect(host.locator("#stage")).toBeVisible();
+
+    // Default theme layers exist: background layer + watermark over the stage.
+    await expect(host.locator("#stage")).toHaveClass(/stage-themed/);
+    await expect(host.locator("#stage .stage-theme-bg")).toHaveCount(1);
+    await expect(host.locator("#stage .stage-watermark")).toBeVisible();
+    await expectNoOverflow(host);
+
+    // Open the panel — it must fit the phone.
+    await host.click("#btnTheme");
+    await expect(host.locator("#themeModal")).toBeVisible();
+    await expectWithinViewport(host, host.locator("#themeModal .modal"));
+    await expectNoOverflow(host);
+
+    // Background preset: the layer's inline style flips to that gradient.
+    await host.locator('#bgSwatches [data-bg="ember"]').click();
+    await expect
+      .poll(() => host.locator("#stage .stage-theme-bg").getAttribute("style"), { timeout: 5000 })
+      .toContain("linear-gradient");
+
+    // Accent color: the stage CSS variable tracks the pick.
+    await host.locator('#accentSwatches [data-accent="#e8503a"]').click();
+    await expect
+      .poll(() =>
+        host.evaluate(() => document.getElementById("stage").style.getPropertyValue("--stage-accent")),
+        { timeout: 5000 },
+      )
+      .toBe("#e8503a");
+
+    // Element toggles: name tags hide and come back.
+    await flipSwitch(host, "optNames", false);
+    await expect(host.locator("#stage")).toHaveAttribute("data-names", "off");
+    await expect(host.locator("#stage .tile-name").first()).toBeHidden();
+    await flipSwitch(host, "optNames", true);
+    await expect(host.locator("#stage")).toHaveAttribute("data-names", "on");
+    await expect(host.locator("#stage .tile-name").first()).toBeVisible();
+
+    // Templates: spotlight (and the custom slot) apply without breaking layout.
+    await host.locator('[data-tpl="spotlight"]').click();
+    await expect(host.locator("#stage")).toHaveAttribute("data-template", "spotlight");
+    await host.locator("#btnSaveArrangement").click();
+    await expect(host.locator("#stage")).toHaveAttribute("data-template", "custom");
+    await expect(host.locator("#stage .tile")).toHaveCount(1); // self tile intact
+    await expectNoOverflow(host);
+
+    // The theme survives the panel closing.
+    await host.click("#btnThemeClose");
+    await expect(host.locator("#themeModal")).toBeHidden();
+    await expect(host.locator("#stage")).toHaveAttribute("data-template", "custom");
+    await expectNoOverflow(host);
+
+    expect(errors, `JS errors during theme session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
+  } finally {
+    await hostCtx.close().catch(() => {});
+  }
+});

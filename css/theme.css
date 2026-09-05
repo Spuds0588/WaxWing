@@ -1,0 +1,316 @@
+/* WaxWing — Studio theme styles.
+   Backgrounds, logos, accent colors, element toggles, and stage templates,
+   all scoped under .stage-themed (the host stage). Split from style.css so
+   the theme layer stays self-contained. */
+
+/* Background layer sits behind every tile; tiles are absolute so they
+   paint above it as long as it's the first child of #stage. */
+.stage-themed .stage-theme-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.stage-themed .tile {
+  z-index: 1;
+}
+
+/* Accent-colored stage elements (re-derived per theme via CSS vars). */
+.stage-themed .tile.tile-active {
+  border-color: var(--stage-accent);
+}
+.stage-themed .tile-grip::before {
+  border-right-color: var(--stage-accent);
+  border-bottom-color: var(--stage-accent);
+}
+.stage-themed .chip-host {
+  background: var(--stage-accent-soft);
+  color: var(--stage-accent);
+  border-color: var(--stage-accent-line);
+}
+.stage-themed .chip-screen {
+  background: var(--stage-accent);
+  color: var(--stage-accent-ink);
+  border-color: var(--stage-accent);
+}
+.stage-themed .tile-ph-avatar {
+  color: var(--stage-accent);
+  background: var(--stage-accent-soft);
+  border-color: var(--stage-accent-line);
+}
+.stage-themed .tile-novideo {
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--stage-accent-soft), transparent 70%),
+    #0d0f16;
+}
+
+/* Element toggles — the theme sets data-* attrs on #stage and CSS acts. */
+.stage-themed[data-names="off"] .tile-name {
+  display: none;
+}
+.stage-themed[data-chips="off"] .tile-role {
+  display: none;
+}
+.stage-themed[data-frame="on"] {
+  border-color: var(--stage-accent-line);
+}
+.stage-themed[data-frame="off"] {
+  border-color: #262b3d;
+}
+
+/* Watermark / logo overlay (floats above tiles, never intercepts taps). */
+.stage-watermark {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  display: block;
+  opacity: 0.9;
+}
+.stage-watermark svg,
+.stage-watermark img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.stage-watermark svg {
+  color: var(--stage-accent);
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55));
+}
+.stage-watermark[data-pos="tl"] {
+  top: 14px;
+  left: 16px;
+}
+.stage-watermark[data-pos="tr"] {
+  top: 14px;
+  right: 16px;
+}
+.stage-watermark[data-pos="bl"] {
+  bottom: 14px;
+  left: 16px;
+}
+.stage-watermark[data-pos="br"] {
+  bottom: 14px;
+  right: 16px;
+}
+.stage-watermark[data-pos="bc"] {
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* ---- theme panel modal ---- */
+
+.theme-modal {
+  width: min(780px, 100%);
+}
+.theme-modal .modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+  margin-top: 16px;
+}
+.theme-sec {
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 13px 14px;
+  min-width: 0;
+}
+.theme-sec h3 {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.theme-note {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+
+.tpl-row,
+.swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tpl-chip {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.tpl-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.tpl-chip.active {
+  background: rgba(255, 198, 61, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 0.12s, border-color 0.12s;
+}
+.swatch:hover {
+  transform: translateY(-1px);
+}
+.swatch.active {
+  border-color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 0 0 3px var(--bg);
+}
+.swatch-label {
+  position: absolute;
+  left: 50%;
+  bottom: -17px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.theme-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+}
+.color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.color-field input[type="color"] {
+  width: 36px;
+  height: 30px;
+  padding: 2px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.color-field select {
+  width: auto;
+  padding: 6px 9px;
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+}
+.theme-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.theme-range-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .theme-grid {
+    grid-template-columns: 1fr;
+  }
+  .toggle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ======================================================================
+   Stage layout quick bar (host, shown while shared screens are live)
+   ====================================================================== */
+
+.stage-layout-bar {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(8, 7, 5, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.8);
+  max-width: calc(100% - 24px);
+}
+.stage-layout-bar .layout-bar-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 6px 0 5px;
+  white-space: nowrap;
+}
+.stage-layout-bar .layout-chip {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.stage-layout-bar .layout-chip:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.stage-layout-bar .layout-chip.active {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* Never crowd the full-screen button on the opposite corner. */
+@media (max-width: 640px) {
+  .stage-layout-bar {
+    left: 8px;
+    top: 8px;
+    flex-wrap: wrap;
+    border-radius: 14px;
+    max-width: calc(100% - 16px);
+  }
+  .stage-layout-bar .layout-chip {
+    font-size: 11px;
+    padding: 4px 9px;
+  }
+}

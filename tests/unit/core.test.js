@@ -3,11 +3,12 @@
 // desktop rendering both depend on.
 
 import { describe, expect, test } from "bun:test";
-import { autoRects, mixedRects } from "../../js/stage.js";
+import { autoRects, gridRects, layoutRects, mixedRects, spotlightRects } from "../../js/stage.js";
 import { clamp, coverCrop, fmtBytes, randomRoomCode, safeName } from "../../js/util.js";
 import { ROOM_CODE_ALPHABET, SYNC } from "../../js/config.js";
 import { uploadBlob } from "../../js/sync.js";
 import { mixAssignments } from "../../js/audio-bus.js";
+import { bgCss, hexToRgb, inkFor } from "../../js/theme.js";
 
 const EPS = 1e-9;
 
@@ -245,6 +246,210 @@ describe("mixAssignments (nobody hears themselves)", () => {
     expect(plan.guests.g2).toEqual(["self"]); // g2 hears the host, not their own tab
     expect(plan.monitor).toEqual(["screen:g2"]); // the host hears g2's tab
     expect([...plan.master].sort()).toEqual(["screen:g2", "self"]);
+  });
+});
+
+describe("layoutRects (multi-screen layouts: head-to-head, spotlight, custom)", () => {
+  // Keys: two shared screens (sA, sB) plus two cameras (cA, cB).
+  const keys = ["cA", "sA", "cB", "sB"]; // join order: camera, screen, camera, screen
+  const isScreen = (k) => k.startsWith("s");
+  const inBounds = (r) =>
+    r.x >= 0 && r.y >= 0 && r.w > 0 && r.h > 0 && r.x + r.w <= 1 + EPS && r.y + r.h <= 1 + EPS;
+  const noOverlap = (a, b) => {
+    const ox = a.x < b.x + b.w - EPS && b.x < a.x + a.w - EPS;
+    const oy = a.y < b.y + b.h - EPS && b.y < a.y + a.h - EPS;
+    return !(ox && oy);
+  };
+  const allOk = (res) => {
+    const rects = [...res.rects.values()];
+    expect(rects.every(inBounds)).toBe(true);
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        expect(noOverlap(rects[i], rects[j])).toBe(true);
+      }
+    }
+  };
+
+  test("auto: screens get the top band, cameras strip below (presentation order)", () => {
+    const res = layoutRects(keys, isScreen, "auto");
+    expect(res.presentation).toEqual(["sA", "sB", "cA", "cB"]); // screens first
+    const sA = res.rects.get("sA");
+    const sB = res.rects.get("sB");
+    const cA = res.rects.get("cA");
+    const cB = res.rects.get("cB");
+    // Screens side by side in the top band, same row.
+    expect(sA.y).toBeCloseTo(sB.y);
+    expect(sA.w).toBeCloseTo(sB.w);
+    expect(sB.x).toBeGreaterThan(sA.x);
+    // Cameras share one strip below every screen.
+    expect(cA.y).toBeCloseTo(cB.y);
+    expect(cA.y).toBeGreaterThanOrEqual(sA.y + sA.h);
+    allOk(res);
+  });
+
+  test("grid: two shared screens go head-to-head in the top row, cameras below", () => {
+    const res = layoutRects(keys, isScreen, "grid");
+    const sA = res.rects.get("sA");
+    const sB = res.rects.get("sB");
+    const cA = res.rects.get("cA");
+    const cB = res.rects.get("cB");
+    // Screens own cells 0 and 1 (the top row) — the head-to-head split.
+    expect(sA.y).toBeCloseTo(sB.y);
+    expect(sA.w).toBeCloseTo(sB.w);
+    expect(sA.h).toBeCloseTo(sB.h);
+    // Cameras fill the row below.
+    expect(cA.y).toBeCloseTo(cB.y);
+    expect(cA.y).toBeGreaterThanOrEqual(sA.y + sA.h);
+    allOk(res);
+  });
+
+  test("spotlight: the first shared screen is featured by default", () => {
+    const res = layoutRects(keys, isScreen, "spotlight");
+    expect(res.focus).toBe("sA");
+    const sA = res.rects.get("sA");
+    expect(sA.w).toBeGreaterThan(0.5); // owns the left two-thirds
+    expect(sA.x).toBeCloseTo(0.012);
+    expect(sA.y).toBeCloseTo(0.012);
+    expect(sA.h).toBeCloseTo(1 - 2 * 0.012);
+    allOk(res);
+  });
+
+  test("spotlight: a host-chosen camera can be featured instead of a screen", () => {
+    const res = layoutRects(keys, isScreen, "spotlight", null, "cB");
+    expect(res.focus).toBe("cB");
+    expect(res.rects.get("cB").w).toBeGreaterThan(0.5);
+    allOk(res);
+  });
+
+  test("custom: saved arrangement maps positionally in screens-first order", () => {
+    // A saved arrangement with screen-sized rects first, camera rects after.
+    const tpl = [
+      { x: 0.012, y: 0.012, w: 0.48, h: 0.48 },
+      { x: 0.508, y: 0.012, w: 0.48, h: 0.48 },
+      { x: 0.012, y: 0.508, w: 0.23, h: 0.48 },
+      { x: 0.258, y: 0.508, w: 0.23, h: 0.48 },
+    ];
+    const res = layoutRects(keys, isScreen, "custom", tpl);
+    expect(res.rects.get("sA")).toEqual(tpl[0]); // screens take the first slots
+    expect(res.rects.get("sB")).toEqual(tpl[1]);
+    expect(res.rects.get("cA")).toEqual(tpl[2]);
+    expect(res.rects.get("cB")).toEqual(tpl[3]);
+    allOk(res);
+  });
+
+  test("custom: extra joiners fall back to auto slots instead of overlapping", () => {
+    const tpl = [{ x: 0.012, y: 0.012, w: 0.4, h: 0.9 }];
+    const res = layoutRects(["sA", "sB", "cA"], isScreen, "custom", tpl);
+    const sB = res.rects.get("sB");
+    const cA = res.rects.get("cA");
+    expect(inBounds(sB) && inBounds(cA)).toBe(true);
+    expect(noOverlap(res.rects.get("sA"), sB)).toBe(true);
+    expect(noOverlap(sB, cA)).toBe(true);
+  });
+
+  test("no screens: every template matches the single-family behavior exactly", () => {
+    const cams = ["cA", "cB", "cC"];
+    const isC = (k) => k.startsWith("s"); // none match -> all cameras
+    expect(layoutRects(cams, isC, "auto").rects.get("cA")).toEqual(autoRects(3)[0]);
+    expect(layoutRects(cams, isC, "grid").rects.get("cA")).toEqual(gridRects(3)[0]);
+    expect(layoutRects(cams, isC, "spotlight").rects.get("cA")).toEqual(spotlightRects(3, 0)[0]);
+  });
+
+  test("one screen, no cameras: it fills the stage like a solo tile", () => {
+    const res = layoutRects(["sA"], isScreen, "auto");
+    expect(res.rects.get("sA")).toEqual(autoRects(1)[0]);
+    expect(res.focus).toBeNull(); // spotlight not engaged
+  });
+});
+
+describe("stage templates (gridRects / spotlightRects)", () => {
+  const inBounds = (r) =>
+    r.x >= 0 && r.y >= 0 && r.w > 0 && r.h > 0 && r.x + r.w <= 1 + EPS && r.y + r.h <= 1 + EPS;
+  const noOverlap = (a, b) => {
+    const ox = a.x < b.x + b.w - EPS && b.x < a.x + a.w - EPS;
+    const oy = a.y < b.y + b.h - EPS && b.y < a.y + a.h - EPS;
+    return !(ox && oy);
+  };
+
+  test("gridRects: equal 2×2 cells for 4 participants", () => {
+    const rects = gridRects(4);
+    expect(rects).toHaveLength(4);
+    expect(rects[0].w).toBeCloseTo(rects[3].w);
+    expect(rects[0].h).toBeCloseTo(rects[3].h);
+    expect(rects[0].y).toBeCloseTo(rects[1].y); // same row
+    expect(rects[0].x).toBeCloseTo(rects[2].x); // same column
+  });
+
+  for (const n of [2, 3, 4]) {
+    test(`gridRects(${n}): in-bounds and non-overlapping`, () => {
+      const rects = gridRects(n);
+      expect(rects).toHaveLength(n);
+      expect(rects.every(inBounds)).toBe(true);
+      for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          expect(noOverlap(rects[i], rects[j])).toBe(true);
+        }
+      }
+    });
+  }
+
+  test("spotlightRects: the focus tile owns the left two-thirds", () => {
+    const rects = spotlightRects(3, 0);
+    const [focus, ...side] = rects;
+    expect(focus.w).toBeCloseTo(0.62 * (1 - 2 * 0.012));
+    expect(focus.x).toBe(0.012);
+    expect(focus.y).toBe(0.012);
+    expect(focus.h).toBeCloseTo(1 - 2 * 0.012);
+    // Side tiles stack to the right of the focus, same width, no overlap.
+    expect(side[0].x).toBeCloseTo(focus.x + focus.w + 0.012);
+    expect(side[0].w).toBeCloseTo(side[1].w);
+    expect(noOverlap(focus, side[0])).toBe(true);
+    expect(noOverlap(side[0], side[1])).toBe(true);
+    expect(rects.every(inBounds)).toBe(true);
+  });
+
+  test("spotlightRects: a single participant fills the stage like auto", () => {
+    expect(spotlightRects(1)).toEqual(autoRects(1));
+    expect(gridRects(1)).toEqual(autoRects(1));
+  });
+
+  test("spotlightRects: focus in the middle still yields a valid layout", () => {
+    const rects = spotlightRects(4, 1);
+    expect(rects).toHaveLength(4);
+    expect(rects.every(inBounds)).toBe(true);
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        expect(noOverlap(rects[i], rects[j])).toBe(true);
+      }
+    }
+  });
+});
+
+describe("theme helpers (color + backgrounds)", () => {
+  test("hexToRgb parses 3 and 6 digit hex, falls back to waxwing yellow", () => {
+    expect(hexToRgb("#ffc63d")).toEqual({ r: 255, g: 198, b: 61 });
+    expect(hexToRgb("#fff")).toEqual({ r: 255, g: 255, b: 255 });
+    expect(hexToRgb("garbage")).toEqual({ r: 255, g: 198, b: 61 });
+  });
+
+  test("inkFor picks dark ink on bright accents and light ink on dark ones", () => {
+    expect(inkFor("#ffc63d")).toBe("#261f04");
+    expect(inkFor("#ffffff")).toBe("#261f04");
+    expect(inkFor("#111111")).toBe("#f4efe3");
+  });
+
+  test("bgCss builds the right CSS for every background kind", () => {
+    expect(bgCss({ kind: "color", color: "#0a0a0a" })).toBe("#0a0a0a");
+    expect(bgCss({ kind: "gradient", from: "#1c1308", to: "#0a0805", angle: 160 })).toBe(
+      "linear-gradient(160deg, #1c1308, #0a0805)",
+    );
+    expect(bgCss({ kind: "radial", from: "#241706", to: "#080705" })).toBe(
+      "radial-gradient(120% 90% at 50% 0%, #241706, #080705)",
+    );
+    expect(bgCss({ kind: "image", image: "data:image/png;base64,AA", color: "#080705" })).toContain(
+      'url("data:image/png;base64,AA") center / cover no-repeat, #080705',
+    );
+    expect(bgCss(null)).toBe("#080705");
   });
 });
 
