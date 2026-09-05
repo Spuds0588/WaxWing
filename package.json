@@ -14,7 +14,8 @@
     "test:e2e": "bun run build && bunx playwright test",
     "og:gen": "node scripts/gen-og.mjs",
     "favicon:gen": "node scripts/gen-favicon.mjs",
-    "smoke:2tab": "bun scripts/smoke-2tab.mjs"
+    "smoke:2tab": "bun scripts/smoke-2tab.mjs",
+    "smoke:4way": "bun scripts/smoke-4way.mjs"
   },
   "dependencies": {
     "peerjs": "^1.5.5"

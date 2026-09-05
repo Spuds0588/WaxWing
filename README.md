@@ -64,6 +64,16 @@ WebSockets are blocked) and swaps `showDirectoryPicker` for an in-memory twin
 of the File System Access handle — everything else is the real media, recorder
 and sync code. Needs chromium + system libs as above.
 
+### Four-person smoke (`bun run smoke:4way`)
+
+The same harness at the PRD's max call — **host + 3 guests** (two phone
+profiles and a laptop, each a real Chromium tab). It asserts the full house
+assembles on the host's stage as **4 live tiles in a 2×2 grid**, every guest
+goes "On air" decoding the 1080p composited broadcast, one Record click starts
+**four simultaneous local masters**, and Stop syncs all three guest masters
+back into the host's folder — then proves the folder holds **four non-trivial
+webm files**, so the sync verdict isn't just UI green.
+
 CI (`.github/workflows/ci.yml`) runs typecheck + unit tests + build + the E2E
 suite on every push and pull request.
 
