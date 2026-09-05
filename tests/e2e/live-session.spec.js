@@ -2,13 +2,14 @@
 //
 // Runs at every phone viewport in playwright.config.js (Android-portrait,
 // iOS-portrait, phone-landscape). Unlike the shell-only specs, this one
-// actually runs the product: two real browser contexts — a host and a
-// guest — join a studio over WebRTC (signaling via the LOCAL PeerJS server
+// actually runs the product: real browser contexts — a host and one or more
+// guests — join a studio over WebRTC (signaling via the LOCAL PeerJS server
 // that playwright.config.js starts, so no external network is needed), the
-// stage goes live, and a record/stop round trips the guest's master back to
-// the host. Every screen in that flow is asserted to fit the phone with no
-// overflow — the exact "layout breaking on mobile during a session" class of
-// bug this suite exists to catch.
+// stage goes live, and a record/stop round trips the guests' masters back to
+// the host. The last test runs the PRD's full house (host + 3 guests, the
+// call-size cap) end to end. Every screen in that flow is asserted to fit
+// the phone with no overflow — the exact "layout breaking on mobile during
+// a session" class of bug this suite exists to catch.
 //
 // Fake camera/mic are provided per-file via launchOptions; the folder
 // picker is swapped for an in-memory stand-in (headless can't show native
@@ -31,8 +32,12 @@ test.use({
 });
 
 // In-memory stand-in for the OS directory picker — same shape fs.js expects.
+// Also exposes window.__WW_FILES__ (fileName -> bytes written) so tests can
+// prove real media landed in the folder, not just that the UI turned green.
 const DIR_STUB = `() => {
   const store = new Map();
+  const sizes = {};
+  window.__WW_FILES__ = sizes;
   return {
     name: "WaxWing-E2E",
     queryPermission: async () => "granted",
@@ -42,9 +47,13 @@ const DIR_STUB = `() => {
       const parts = store.get(fileName);
       return {
         async createWritable() {
-          const stream = new WritableStream({ write(chunk) { parts.push(chunk); } });
+          let size = 0;
+          const stream = new WritableStream({ write(chunk) { parts.push(chunk); size += (chunk && chunk.byteLength) || chunk?.size || 0; } });
           const writer = stream.getWriter();
-          return { write: (c) => writer.write(c), close: () => writer.close() };
+          return {
+            write: (c) => writer.write(c),
+            close: async () => { await writer.close(); sizes[fileName] = (sizes[fileName] || 0) + size; },
+          };
         },
         async getFile() { return new File(parts, fileName, { type: "video/webm" }); },
       };
@@ -320,4 +329,146 @@ test("host can direct with local saving off while guests still record and sync",
     await expectNoOverflow(guest);
   });
   expect(errors, `JS errors during session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
+});
+
+test("full house: host + three guests — stage, record, and sync hold up on a phone", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const { viewport, userAgent, isMobile, hasTouch, deviceScaleFactor } =
+    test.info().project.use;
+  const GUESTS = ["Ann", "Bo", "Cat"];
+  const errors = [];
+
+  const mkCtx = async () => {
+    const ctx = await browser.newContext({
+      viewport, userAgent, isMobile, hasTouch, deviceScaleFactor,
+    });
+    await ctx.addInitScript((sig) => {
+      window.__WW_PEER__ = sig;
+    }, SIG);
+    await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
+    await ctx.addInitScript(CLAMP_GUM);
+    return ctx;
+  };
+
+  const hostCtx = await mkCtx();
+  const guestCtxs = await Promise.all([mkCtx(), mkCtx(), mkCtx()]);
+  try {
+    const host = await hostCtx.newPage();
+    const guests = [];
+    for (const ctx of guestCtxs) guests.push(await ctx.newPage());
+    for (const p of [host, ...guests]) {
+      p.on("pageerror", (e) => errors.push(String(e)));
+      p.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+    }
+
+    // Host enters the studio and grabs the room code.
+    await host.goto("/");
+    await host.locator("#landing .land-hero [data-start]").click();
+    await host.fill("#nameInput", "Host D");
+    await host.click("#btnEnter");
+    await expect(host.locator("#welcomeModal")).toBeHidden();
+    await expect(host.locator("#roomChipCode")).toHaveText(/^[A-Z2-9]{6}$/);
+    const room = (await host.locator("#roomChipCode").textContent()).trim();
+
+    // Guests join one at a time; the host's count climbs 1/3 -> 3/3.
+    for (let i = 0; i < GUESTS.length; i++) {
+      const g = guests[i];
+      await g.goto(`/?room=${room}`);
+      await g.fill("#nameInput", GUESTS[i]);
+      await g.click("#btnEnter");
+      await expect(g.locator("#welcomeModal")).toBeHidden();
+      await expect(host.locator("#guestCountBadge")).toContainText(`${i + 1}/3`, { timeout: 30_000 });
+      await expect(host.locator("#guestList")).toContainText(GUESTS[i], { timeout: 15_000 });
+    }
+
+    // Full house on the host's phone stage: self + 3 guests, all decoding.
+    await expect(host.locator("#stageEmpty")).toBeHidden();
+    await expect
+      .poll(async () => host.locator("#stage .tile").count(), { timeout: 30_000 })
+      .toBe(4);
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() =>
+            [...document.querySelectorAll("#stage .tile .tile-name")]
+              .map((n) => n.textContent.trim())
+              .sort()
+              .join(","),
+          ),
+        { timeout: 30_000 },
+      )
+      .toBe("Ann,Bo,Cat,Host D");
+    await expectNoOverflow(host);
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const videos = [...document.querySelectorAll("#stage .tile video")];
+            return videos.length === 4 && videos.every((v) => v.videoWidth > 0 && !v.paused);
+          }),
+        { timeout: 60_000 },
+      )
+      .toBe(true);
+
+    // Every guest is on air and decoding the composited broadcast.
+    for (const g of guests) {
+      await expect(g.locator("#connPill")).toContainText("On air", { timeout: 30_000 });
+    }
+    await expect
+      .poll(
+        async () =>
+          guests[0].evaluate(() => {
+            const v = document.querySelector(".stage-video-fill");
+            return v && v.videoWidth > 0 && !v.paused;
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+
+    // One Record click starts FOUR local masters; stop syncs three back.
+    await host.click("#btnRecord");
+    await expect(host.locator("#recChip")).toBeVisible();
+    for (const g of guests) {
+      await expect(g.locator("#recChip")).toBeVisible({ timeout: 20_000 });
+    }
+    await host.waitForTimeout(3000);
+    await host.click("#btnRecord");
+
+    await expect(host.locator("#syncModal")).toBeVisible({ timeout: 30_000 });
+    await expectNoOverflow(host);
+    await expect(host.locator("#recRowSelf .rec-state")).toContainText("Saved locally", { timeout: 40_000 });
+    // All three guest rows finish and Close unlocks.
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const rows = [...document.querySelectorAll("#syncList .sync-row")];
+            const close = document.querySelector("#btnSyncClose");
+            return rows.length === 3 && rows.every((r) => r.classList.contains("done")) && !close.disabled;
+          }),
+        { timeout: 120_000 },
+      )
+      .toBe(true);
+    // Folder proof: the host's folder holds 4 real masters with real bytes.
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const entries = Object.entries(window.__WW_FILES__ || {});
+            return entries.length >= 4 && entries.every(([, bytes]) => bytes > 50_000);
+          }),
+        { timeout: 60_000 },
+      )
+      .toBe(true);
+
+    await expectNoOverflow(host);
+    await expectNoOverflow(guests[0]);
+
+    expect(errors, `JS errors during full-house session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
+  } finally {
+    await hostCtx.close().catch(() => {});
+    for (const ctx of guestCtxs) await ctx.close().catch(() => {});
+  }
 });
