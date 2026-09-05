@@ -182,13 +182,26 @@ function startHeroDemo() {
     return;
   }
 
+  // Single self-rescheduling tick drives the whole storyboard: scene
+  // changes come from a timestamped clock (immune to timer throttling and
+  // to a thrown error killing the chain), the layout beat's
+  // grid->spotlight->custom walk is derived from elapsed scene time (no
+  // parallel timers). The clock freezes only while the tab is hidden (where
+  // timers get throttled), so the loop always runs whenever the page is
+  // visible — no matter where the stage sits in the scroll — and scenes
+  // resume where they left off.
+  let idx = -1;
+  let sceneStart = 0;
   let paused = false;
-  let ticket = 0;
-  let idx = 0;
-  const io = new IntersectionObserver((entries) => {
-    paused = !entries[0].isIntersecting;
-  });
-  io.observe(stage);
+  let frozenElapsed = 0;
+
+  function setPaused(p) {
+    if (p === paused) return;
+    if (p) frozenElapsed = performance.now() - sceneStart;
+    else sceneStart = performance.now() - frozenElapsed; // resume where it left off
+    paused = p;
+  }
+  document.addEventListener("visibilitychange", () => setPaused(document.hidden));
 
   // Progress bars + check states for the files panel: recording beat = the
   // host's file is green locally, guests sweep their P2P transfer bars;
@@ -203,8 +216,7 @@ function startHeroDemo() {
     });
   }
 
-  function enter(step) {
-    const t = ++ticket;
+  function paint(step) {
     stage.dataset.scene = step.scene;
     stage.dataset.layout = step.layouts ? step.layouts[0] : "";
     stage.dataset.rec = step.scene === "record" ? "on" : "";
@@ -218,31 +230,46 @@ function startHeroDemo() {
     toast.classList.remove("is-on");
     void toast.offsetWidth; // restart the auto-fade animation
     toast.classList.add("is-on");
-
-    if (!step.layouts) return;
-    // The directing beat walks through grid -> spotlight -> custom on its
-    // own cadence before advancing to record.
-    let li = 1;
-    const walk = setInterval(() => {
-      if (t !== ticket) { clearInterval(walk); return; }
-      const layout = step.layouts[li++];
-      if (!layout) { clearInterval(walk); setTimeout(advance, 300); return; }
-      stage.dataset.layout = layout;
-      lbItems.forEach((it) => it.classList.toggle("is-on", it.dataset.l === layout));
-    }, step.layoutMs);
   }
 
-  function advance() {
-    if (paused) { setTimeout(advance, 300); return; }
-    idx = (idx + 1) % HS_DEMO.length;
-    const step = HS_DEMO[idx];
-    enter(step);
-    const base = step.layouts ? step.layouts.length * step.layoutMs + 400 : step.ms;
-    setTimeout(advance, base);
+  function stepDuration(step) {
+    return step.layouts ? step.layouts.length * step.layoutMs + 600 : step.ms;
   }
 
-  enter(HS_DEMO[0]);
-  setTimeout(advance, HS_DEMO[0].ms);
+  function tick() {
+    try {
+      const step = HS_DEMO[idx];
+      if (!step) {
+        idx = 0;
+        sceneStart = performance.now();
+        paint(HS_DEMO[0]);
+      } else if (!paused) {
+        const elapsed = performance.now() - sceneStart;
+        if (elapsed >= stepDuration(step)) {
+          idx = (idx + 1) % HS_DEMO.length;
+          sceneStart = performance.now();
+          paint(HS_DEMO[idx]);
+        } else if (step.layouts) {
+          // The directing beat walks grid -> spotlight -> custom on its own
+          // cadence, derived from elapsed scene time.
+          const li = Math.min(
+            step.layouts.length - 1,
+            Math.floor(elapsed / step.layoutMs),
+          );
+          if (stage.dataset.layout !== step.layouts[li]) {
+            stage.dataset.layout = step.layouts[li];
+            lbItems.forEach((it) =>
+              it.classList.toggle("is-on", it.dataset.l === step.layouts[li]),
+            );
+          }
+        }
+      }
+    } catch {
+      // Never let an error kill the loop — the show must go on.
+    }
+    setTimeout(tick, 250);
+  }
+  tick();
 }
 
 function boot() {

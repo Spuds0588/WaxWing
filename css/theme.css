@@ -314,3 +314,24 @@
     padding: 4px 9px;
   }
 }
+
+/* Landing hero demo storyboard — reduced-motion guard: the JS engine pins
+   the demo to a static full-studio frame; strip transitions/animations so
+   that frame doesn't half-animate into place and no pulse/blink loops run.
+   (Lives here rather than style.css to keep the demo layer together and
+   load after the base sheet.) */
+@media (prefers-reduced-motion: reduce) {
+  .hs-tile,
+  .hs-screen,
+  .hs-top,
+  .hs-linkbar,
+  .hs-layoutbar,
+  .hs-files,
+  .hs-toast,
+  .hs-rec,
+  .hs-fbar::after,
+  .hs-rec.is-on i {
+    transition: none !important;
+    animation: none !important;
+  }
+}

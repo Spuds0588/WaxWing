@@ -123,6 +123,15 @@ test("the waxwing brand mark actually renders on the page", async ({ page }) => 
   await lightPixels(page, page.locator("#welcomeModal .brand-lg .brand-logo"));
 });
 
+test("hero demo storyboard keeps cycling past the join beat", async ({ page }) => {
+  await page.goto("/");
+  const hs = page.locator(".hero-stage");
+  await expect(hs).toHaveAttribute("data-scene", "link");
+  // The loop must actually advance — a regression once froze it on join.
+  await expect(hs).toHaveAttribute("data-scene", "join", { timeout: 9000 });
+  await expect(hs).toHaveAttribute("data-scene", "share", { timeout: 9000 });
+});
+
 test("host funnels from the selling home page into a fitting studio shell", async ({ page }) => {
   await page.goto("/"); // no ?room => host
 
