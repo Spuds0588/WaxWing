@@ -15,6 +15,15 @@ export const PROXY = {
   video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: 24 },
 };
 
+// Screen-share capture (the sharer's local capture) and the downscaled
+// screen track that travels over the WebRTC link for guests. The host's own
+// share goes straight into the composer at capture size; only the transport
+// clone is constrained.
+export const SCREEN = {
+  video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 24 } },
+  proxy: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24 } },
+};
+
 // Master capture ladder: ask for 4K, fall back gracefully.
 export const MASTER_LADDER = [
   { width: 3840, height: 2160, label: "4K" },

@@ -63,6 +63,7 @@
         "Up to 4 participants (1 host, 3 guests)",
         "Guest magic links — no sign-up",
         "Draggable 16:9 stage with auto layouts",
+        "Live screen sharing — present a tab, window, or screen as its own stage tile",
         "Records full-quality 4K masters locally to disk",
         "Post-show peer-to-peer file sync",
         "1080p Director's Cut region capture",
@@ -180,7 +181,7 @@
             </button>
             <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
           </div>
-          <p class="hero-trust">4K masters · P2P encrypted · up to 4 people (1 host + 3 guests)</p>
+          <p class="hero-trust">4K masters · P2P encrypted · up to 4 people · share your screen</p>
         </div>
 
         <div class="hero-stage-wrap" aria-hidden="true">
@@ -243,7 +244,7 @@
           <article class="feat">
             <span class="feat-ico"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M10 9l5 2-5 2z"/></svg></span>
             <h4>Director&rsquo;s Cut</h4>
-            <p>Drag, drop, and resize feeds on a 16:9 stage, then capture exactly what you arranged &mdash; a 1080p region recording of the show.</p>
+            <p>Drag, drop, and resize feeds on a 16:9 stage &mdash; cameras, and anyone&rsquo;s shared screen &mdash; then capture exactly what you arranged in a 1080p region recording of the show.</p>
           </article>
           <article class="feat">
             <span class="feat-ico"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span>
@@ -343,6 +344,15 @@
       </div>
 
       <div id="hostControls" class="host-controls hidden">
+        <button
+          id="btnShareScreen"
+          class="btn btn-ghost btn-share hidden"
+          title="Share your screen"
+          aria-label="Share your screen"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span id="btnShareScreenLabel">Share</span>
+        </button>
         <button id="btnResetLayout" class="btn btn-ghost" title="Reset tile layout" hidden>
           Auto-layout
         </button>

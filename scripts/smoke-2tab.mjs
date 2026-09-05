@@ -91,6 +91,33 @@ const DIR_STUB = `() => {
   };
 }`;
 
+// getDisplayMedia opens a native picker, which headless can't drive — stub
+// it with a live canvas stream (real captureStream video track). Everything
+// downstream of the picker is the production path.
+const DISPLAY_STUB = `(() => {
+  navigator.mediaDevices.getDisplayMedia = async () => {
+    const c = document.createElement("canvas");
+    c.width = 640;
+    c.height = 360;
+    const ctx = c.getContext("2d");
+    let frame = 0;
+    const draw = () => {
+      frame++;
+      ctx.fillStyle = "#14324f";
+      ctx.fillRect(0, 0, 640, 360);
+      ctx.fillStyle = "#ffc63d";
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText("SHARED " + frame, 40, 200);
+    };
+    draw();
+    const stream = c.captureStream(12);
+    const t = stream.getVideoTracks()[0];
+    const iv = setInterval(draw, 200);
+    t.addEventListener("ended", () => clearInterval(iv));
+    return stream;
+  };
+})();`;
+
 // Point the app at the local signaling server (read by js/network.js).
 const SIG_OVERRIDE = `window.__WW_PEER__ = { host: "127.0.0.1", port: ${SIG_PORT}, path: "/", secure: false, key: "peerjs" };`;  // Live DOM read of a tab at failure time (locator-based so a dead or busy
   // frame reports precisely instead of silently returning {}).
@@ -207,6 +234,7 @@ try {
   for (const ctx of [hostCtx, guestCtx]) {
     await ctx.addInitScript(SIG_OVERRIDE);
     await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
+    await ctx.addInitScript(DISPLAY_STUB);
     // The fake camera advertises 4K; decoding that twice (host + guest) is
     // brutal headless. Clamp capture to 720p for the smoke.
     await ctx.addInitScript(`(() => {
@@ -285,7 +313,24 @@ try {
       }), { timeout: 60_000, label: "decoded stage frames" });
   });
 
-  // 6) host: Record -> everyone records locally
+  // 5b) guest shares its screen as a separate stream -> host stage tile
+  await step("Guest shares screen: a live SCREEN tile joins the host's stage", async () => {
+    await guest.click("#btnShareScreen");
+    await waitFor(host, () =>
+      host.locator("#stage .tile-screen").count().then((n) => n === 1), { timeout: 60_000, label: "screen tile on the host stage" });
+    await waitFor(host, () =>
+      host.evaluate(() => {
+        const v = document.querySelector("#stage .tile-screen video");
+        return v && v.videoWidth > 0 && !v.paused;
+      }), { timeout: 60_000, label: "decoded screen frames" });
+    await waitFor(guest, () =>
+      guest.locator("#btnShareScreen").textContent().then((t) => t?.includes("Stop")), { label: "guest share button armed" });
+    // The guest stays on air; its broadcast now carries the composed screen.
+    await waitFor(guest, () =>
+      guest.locator("#connPill").textContent().then((t) => t?.includes("On air")), { label: "guest still on air" });
+  });
+
+  // 6) host: Record -> everyone records locally (the share stays live)
   await step("Host: Record starts host + guest local masters", async () => {
     await host.click("#btnRecord");
     await waitFor(host, () => host.locator("#recChip").isVisible(), { label: "host REC chip" });
@@ -308,6 +353,18 @@ try {
         const s = document.querySelector("#syncList .sync-status");
         return s && /Sent/.test(s.textContent);
       }), { timeout: 120_000, label: "guest upload confirmed" });
+  });
+
+  // 8) guest: stop sharing -> the host's stage clears the screen tile
+  await step("Guest stops sharing: the host's stage clears the SCREEN tile", async () => {
+    // The guest's "sending your recording" modal is still up after the sync —
+    // close it first or its backdrop swallows the topbar click.
+    await guest.click("#btnSyncClose");
+    await guest.click("#btnShareScreen");
+    await waitFor(guest, () =>
+      guest.locator("#btnShareScreen").textContent().then((t) => t?.includes("Share")), { label: "guest share button reset" });
+    await waitFor(host, () =>
+      host.locator("#stage .tile-screen").count().then((n) => n === 0), { timeout: 60_000, label: "screen tile removed" });
   });
 
   await browser.close();

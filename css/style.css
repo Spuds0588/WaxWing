@@ -1027,6 +1027,9 @@ select option {
   flex-direction: column;
   gap: 8px;
   max-width: min(360px, calc(100vw - 32px));
+  /* Toasts inform; they never own the click. Without this, a fading toast
+     sits over buttons (modal Close, the topbar) and eats pointer events. */
+  pointer-events: none;
 }
 .toast {
   display: flex;
@@ -1041,6 +1044,10 @@ select option {
   font-size: 12.5px;
   box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.8);
   animation: toast-in 0.25s ease;
+  pointer-events: none;
+}
+.toast.toast-danger .toast-close {
+  pointer-events: auto;
 }
 .toast.toast-danger {
   border-left-color: var(--rec);
@@ -2144,4 +2151,41 @@ body.mode-app .modal-backdrop {
   .switch-input:checked + .switch-ui::after {
     transform: translateX(12px);
   }
+}
+
+/* ======================================================================
+   Screen sharing: the Share control, screen tiles, and the SCREEN chip
+   ====================================================================== */
+
+/* Active state for the topbar Share button (mirrors .btn-stage.on). */
+.btn-share.on {
+  background: rgba(255, 198, 61, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-share.on:hover {
+  background: rgba(255, 198, 61, 0.22);
+  border-color: var(--accent);
+}
+
+/* Shared screens letterbox their content (a cover-crop would cut off the
+   slide the presenter is pointing at) on a black backdrop, with an accent
+   border so it reads as "this is what we're watching". */
+.tile.tile-screen {
+  background: #000;
+  border-color: rgba(255, 198, 61, 0.4);
+}
+.tile.tile-screen:hover {
+  border-color: rgba(255, 198, 61, 0.7);
+}
+.tile-screen video {
+  object-fit: contain !important;
+  background: #000;
+}
+
+/* Solid yellow chip: SCREEN shares are the focal point, not a role. */
+.chip-screen {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent);
 }

@@ -108,6 +108,23 @@ Choices are remembered per browser.
   straight on the join screen and connect to the host's browser over WebRTC.
   No accounts, no installs.
 
+### Screen sharing (hosts & guests)
+Anyone in the studio can present: hit **Share** in the top bar and the
+browser picker offers a tab, a window, or the whole screen. The share travels
+as its **own media stream** — separate from the presenter's camera proxy — and
+arrives on the host's stage as a dedicated **SCREEN** tile (letterboxed, so
+slides are never cropped). The stage flips into a presentation layout: shared
+screens own the top band, cameras drop into a strip beneath. Because the tile
+lives in the composer, every guest sees it in the broadcast and it is baked
+into the **Director's Cut** recording (both the DOM region capture and the
+canvas fallback draw it). Tab audio, when the source offers it, joins the mix
+under the sharer's ownership — heard by the audience and recorded, but never
+looped back to the sharer (a shared screen's audio is excluded from its
+owner's own stage bus and the host's own screen is excluded from the host's
+speakers). Stopping uses the browser's "Stop sharing" bar or the same button.
+`getDisplayMedia` isn't available everywhere — notably iOS Safari — so the
+control hides itself where it can't work.
+
 ### Mobile guests (supported)
 Guests can join from a phone in any modern browser:
 
@@ -195,7 +212,7 @@ Vite is only a dev server / static bundler):
 | `recorder.js`   | MediaRecorder + Director's Cut (CropTarget)      |
 | `fs.js`         | File System Access wrapper (memory fallback)     |
 | `sync.js`       | Chunked P2P uploader                             |
-| `device.js`     | Camera ladder + proxy track downscaling          |
+| `device.js`     | Camera ladder, screen share capture, proxy tracks |
 | `config.js`     | Constants                                        |
 | `util.js`       | DOM/format helpers                               |
 

@@ -22,6 +22,9 @@ import {
   listDevices,
   openMasterStream,
   makeProxyVideoTrack,
+  screenShareSupported,
+  openScreenShare,
+  makeScreenProxyTrack,
   savedDeviceIds,
   rememberDeviceIds,
   stopStream,
@@ -49,7 +52,8 @@ const MAX_GUESTS = APP.maxGuests;
 const els = {};
 for (const id of [
   "connPill", "roomCluster", "roomChipCode", "btnCopyInvite",
-  "hostControls", "btnResetLayout", "btnStageRec", "btnRecord", "btnRecordLabel",
+  "hostControls", "btnShareScreen", "btnShareScreenLabel",
+  "btnResetLayout", "btnStageRec", "btnRecord", "btnRecordLabel",
   "btnExit", "btnExitLabel", "recChip", "recTime", "stageChip", "stageTime",
   "syncChip", "qualityNote", "stage", "stageEmpty", "guestSelf", "guestSelfVideo",
   "stageAudioHint", "sidebar", "guestCountBadge", "guestList", "guestListEmpty",
@@ -80,7 +84,11 @@ const S = {
   saveMaster: true,
   hasMedia: false, // did we actually open any track?
   showActive: false, // host: a broadcast run is live (guests recording)
+  // local screen share (either role) — a separate stream from the camera
   masterStream: null,
+  shareActive: false,
+  screenStream: null,
+  screenProxyTrack: null,
   previewStream: null,
   previewCam: "",
   proxyVideoTrack: null,
@@ -210,6 +218,7 @@ function bootStudio() {
 
   // Wire static UI.
   els.btnEnter.addEventListener("click", handleEnter);
+  els.btnShareScreen.addEventListener("click", toggleShare);
   els.btnRefreshDevices.addEventListener("click", () => populateDeviceSelects().then(startCameraPreview));
   els.camSelect.addEventListener("change", startCameraPreview);
   els.optVideo.addEventListener("change", () => {
@@ -545,6 +554,7 @@ async function handleEnter() {
       els.btnRecord.hidden = true;
       els.btnExitLabel.textContent = "Leave";
     }
+    refreshShareControls();
     els.btnFullscreen.classList.remove("hidden");
     updateFsIcon();
     updateOrientHint();
@@ -760,7 +770,30 @@ function hostEvents(e) {
       S.stage.setStream(e.key, e.stream);
       S.bus.addSource(e.key, e.stream);
       break;
+    case "guest-screen-media": {
+      // A guest's shared tab/window/screen arrives as its own tile + audio
+      // source (owned by that guest for the mixer's no-self-echo rules).
+      const name = S.net.guests.get(e.key)?.name || "Guest";
+      const sk = screenKeyFor(e.key);
+      if (!S.stage.entries.has(sk)) {
+        S.stage.addParticipant({
+          key: sk,
+          label: name,
+          isScreen: true,
+          hasVideo: true,
+          hasAudio: Boolean(e.stream.getAudioTracks().length),
+        });
+      }
+      S.stage.setStream(sk, e.stream);
+      S.bus.addSource(sk, e.stream, e.key);
+      updateComposerNeed();
+      break;
+    }
+    case "guest-screen-remove":
+      removeRemoteScreen(e.key);
+      break;
     case "guest-remove":
+      removeRemoteScreen(e.key);
       S.stage.removeParticipant(e.key);
       S.bus.removeGuestBus(e.key);
       S.bus.removeSource(e.key);
@@ -782,9 +815,118 @@ function hostEvents(e) {
 
 // ---- host: protocol messages + sync receive ------------------------------
 
+// ---- screen share ---------------------------------------------------------
+
+const screenKeyFor = (peerKey) => (peerKey === "self" ? "screen:self" : `screen:${peerKey}`);
+
+// Host: drop one remote participant's shared screen (tile + its audio).
+function removeRemoteScreen(peerKey) {
+  const sk = screenKeyFor(peerKey);
+  S.stage?.removeParticipant(sk);
+  S.bus?.removeSource(sk);
+  updateComposerNeed();
+}
+
+async function toggleShare() {
+  if (S.busy || !S.entered) return;
+  if (S.shareActive) {
+    stopShare();
+    return;
+  }
+  if (!screenShareSupported()) {
+    notify("Screen sharing isn't supported in this browser (it needs getDisplayMedia).", "warn");
+    return;
+  }
+  let stream;
+  try {
+    stream = await openScreenShare();
+  } catch (err) {
+    if (err?.cancelled) return; // user closed the picker
+    notify(`Couldn't start sharing: ${err.message}`, "danger");
+    return;
+  }
+  if (!stream || !stream.getVideoTracks().length) {
+    stream?.getTracks().forEach((t) => t.stop());
+    return;
+  }
+  const track = stream.getVideoTracks()[0];
+  const hasAudio = stream.getAudioTracks().length > 0;
+  // The browser's own "Stop sharing" bar and the picker both end the track.
+  track.addEventListener("ended", () => stopShare(true));
+
+  S.screenStream = stream;
+  if (S.role === "guest") {
+    // Guest -> host: the screen is its own media call; the host composes it
+    // into the broadcast, so every guest (including this one) sees it live.
+    const proxy = makeScreenProxyTrack(stream);
+    S.screenProxyTrack = proxy;
+    const out = new MediaStream();
+    if (proxy) out.addTrack(proxy);
+    for (const t of stream.getAudioTracks()) out.addTrack(t);
+    S.net?.shareScreen(out);
+  } else {
+    // Host share: straight onto the local stage/composer (no transport hop).
+    const sk = screenKeyFor("self");
+    if (!S.stage.entries.has(sk)) {
+      S.stage.addParticipant({
+        key: sk,
+        label: S.name,
+        isScreen: true,
+        hasVideo: true,
+        hasAudio,
+      });
+    }
+    S.stage.setStream(sk, stream);
+    // Tab audio joins the mix under "self" ownership: recorded in the
+    // Director's Cut and heard by guests, but NOT replayed on the host's own
+    // speakers (that would loop the tab back into itself).
+    S.bus.addSource(sk, stream, "self");
+    updateComposerNeed();
+  }
+  S.shareActive = true;
+  refreshShareControls();
+  notify("You're sharing your screen — it's live on the stage.", "success");
+}
+
+function stopShare(silent = false) {
+  const wasActive = S.shareActive;
+  S.shareActive = false;
+  if (S.role === "guest") {
+    if (wasActive || S.screenProxyTrack) {
+      S.net?.sendToHost({ t: "screen-off" });
+      S.net?.stopScreenShare();
+    }
+    S.screenProxyTrack?.stop();
+    S.screenProxyTrack = null;
+  } else if (S.screenStream) {
+    removeRemoteScreen("self");
+  }
+  stopStream(S.screenStream);
+  S.screenStream = null;
+  refreshShareControls();
+  if (wasActive && !silent) notify("Screen sharing stopped.", "");
+}
+
+function refreshShareControls() {
+  const show = S.entered && screenShareSupported();
+  els.btnShareScreen?.classList.toggle("hidden", !show);
+  els.btnShareScreen?.classList.toggle("on", S.shareActive);
+  if (els.btnShareScreenLabel) {
+    els.btnShareScreenLabel.textContent = S.shareActive ? "Stop" : "Share";
+  }
+  const title = S.shareActive
+    ? "Stop sharing your screen"
+    : "Share your screen, a window, or a tab";
+  els.btnShareScreen?.setAttribute("aria-label", title);
+  els.btnShareScreen?.setAttribute("title", title);
+}
+
 function hostOnData(key, msg) {
   if (!msg || typeof msg !== "object") return;
   switch (msg.t) {
+    case "screen-off":
+      removeRemoteScreen(key);
+      break;
     case "rec-done": {
       // A guest finished its local master (or can't record at all — e.g.
       // iOS Safari). Either way, stop waiting for it.
@@ -1443,6 +1585,8 @@ function guestOnData(msg) {
 function hostWentAway(why) {
   S.stageLive = false;
   updateOrientHint();
+  // The host is gone — nothing can see the share anymore, so end it.
+  if (S.shareActive || S.screenStream) stopShare(true);
   const wasRecording = S.recActive;
   if (wasRecording) {
     stopOwnRecording("guest", { silent: true }).then(() => {

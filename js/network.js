@@ -135,6 +135,7 @@ export class Network {
         dc: null,
         inCall: null,
         outStageCall: null,
+        screenCall: null, // guest's shared-screen media call (when active)
       };
       this.guests.set(peerId, guest);
       this.emit({
@@ -245,6 +246,7 @@ export class Network {
       if (guest.dc?.open) guest.dc.send(JSON.stringify({ t: reason || "show-full" }));
       guest.dc?.close();
       guest.inCall?.close();
+      guest.screenCall?.close();
       guest.outStageCall?.close();
     } catch {
       /* ignore */
@@ -254,6 +256,33 @@ export class Network {
 
   onIncomingCall(call) {
     const meta = call.metadata || {};
+    if (meta.kind === "screen") {
+      // A guest dialed their shared tab/window/screen as its own media call
+      // (separate from the camera proxy). It lives alongside the guest; the
+      // host renders it as a screen tile and mixes its audio under the
+      // guest's ownership. Closing the share ends this call — never the
+      // guest's whole connection, so it must not run forgetGuest().
+      if (this.role === "host") {
+        const guest = this.ensureGuest(call.peer, meta);
+        guest.screenCall = call;
+        call.answer();
+        call.on("stream", (stream) => {
+          this.emit({ type: "guest-screen-media", key: call.peer, stream });
+        });
+        call.on("close", () => {
+          if (guest.screenCall === call) guest.screenCall = null;
+          this.emit({ type: "guest-screen-remove", key: call.peer });
+        });
+      } else {
+        // Host -> guest: screen shares only travel guest -> host. Ignore.
+        try {
+          call.close();
+        } catch {
+          /* already closed */
+        }
+      }
+      return;
+    }
     if (this.role === "host") {
       const guest = this.ensureGuest(call.peer, meta);
       guest.inCall = call;
@@ -271,6 +300,46 @@ export class Network {
         this.emit({ type: "stage-media", stream });
       });
     }
+  }
+
+  // ---- guest: screen sharing --------------------------------------------
+
+  /**
+   * Guest role: dial the host with a screen-share stream as its own media
+   * call, so it arrives as a separate tile (and separate audio source). The
+   * host tears it down when the data-channel screen-off message arrives or
+   * the call closes. Returns the call for lifecycle wiring.
+   */
+  shareScreen(stream) {
+    if (this.role !== "guest" || !this.peer?.id) return null;
+    const meta = {
+      name: this.displayName,
+      kind: "screen",
+      media: { video: true, audio: Boolean(stream?.getAudioTracks().length) },
+      save: false,
+    };
+    try {
+      const call = this.peer.call(this.room, stream, { metadata: meta });
+      call.on("error", () => {
+        if (!this.destroyed) {
+          this.emit({ type: "screen-share-failed", message: "The screen share link dropped." });
+        }
+      });
+      this.screenCall = call;
+      return call;
+    } catch {
+      return null;
+    }
+  }
+
+  stopScreenShare() {
+    if (this.role !== "guest") return;
+    try {
+      this.screenCall?.close();
+    } catch {
+      /* ignore */
+    }
+    this.screenCall = null;
   }
 
   // ---- host: stage broadcast -------------------------------------------
@@ -375,11 +444,17 @@ export class Network {
         guest.inCall?.close();
       } catch {}
       try {
+        guest.screenCall?.close();
+      } catch {}
+      try {
         guest.outStageCall?.close();
       } catch {}
     }
     try {
       this.hostDc?.close();
+    } catch {}
+    try {
+      this.screenCall?.close();
     } catch {}
     try {
       this.peer?.destroy();

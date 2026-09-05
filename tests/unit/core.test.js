@@ -3,7 +3,7 @@
 // desktop rendering both depend on.
 
 import { describe, expect, test } from "bun:test";
-import { autoRects } from "../../js/stage.js";
+import { autoRects, mixedRects } from "../../js/stage.js";
 import { clamp, coverCrop, fmtBytes, randomRoomCode, safeName } from "../../js/util.js";
 import { ROOM_CODE_ALPHABET, SYNC } from "../../js/config.js";
 import { uploadBlob } from "../../js/sync.js";
@@ -50,6 +50,47 @@ describe("autoRects (stage layouts)", () => {
     expect(a.h).toBeCloseTo(d.h);
     expect(d.x + d.w).toBeLessThanOrEqual(1 + EPS);
     expect(d.y + d.h).toBeLessThanOrEqual(1 + EPS);
+  });
+});
+
+describe("mixedRects (presentation layout: screens on top, cameras below)", () => {
+  for (const s of [1, 2, 3, 4]) {
+    for (const c of [1, 2, 3, 4]) {
+      test(`${s} screen(s) + ${c} camera(s): in-bounds, non-overlapping, screens above cameras`, () => {
+        const { screens, cams } = mixedRects(s, c);
+        expect(screens).toHaveLength(s);
+        expect(cams).toHaveLength(c);
+        const all = [...screens, ...cams];
+        for (const r of all) {
+          expect(r.w).toBeGreaterThan(0);
+          expect(r.h).toBeGreaterThan(0);
+          expect(r.x + r.w).toBeLessThanOrEqual(1 + EPS);
+          expect(r.y + r.h).toBeLessThanOrEqual(1 + EPS);
+        }
+        for (let i = 0; i < all.length; i++) {
+          for (let j = i + 1; j < all.length; j++) {
+            const a = all[i];
+            const b = all[j];
+            const overlapX = a.x < b.x + b.w - EPS && b.x < a.x + a.w - EPS;
+            const overlapY = a.y < b.y + b.h - EPS && b.y < a.y + a.h - EPS;
+            expect(overlapX && overlapY).toBe(false);
+          }
+        }
+        // Every camera sits in the strip below the screen band.
+        const minCamTop = Math.min(...cams.map((r) => r.y));
+        const maxScreenBottom = Math.max(...screens.map((r) => r.y + r.h));
+        expect(minCamTop).toBeGreaterThanOrEqual(maxScreenBottom + EPS);
+        // Cameras share one row.
+        const tops = new Set(cams.map((r) => r.y.toFixed(4)));
+        expect(tops.size).toBe(1);
+      });
+    }
+  }
+
+  test("screens with no cameras fill the whole stage like autoRects", () => {
+    const { screens, cams } = mixedRects(3, 0);
+    expect(cams).toEqual([]);
+    expect(screens).toEqual(autoRects(3));
   });
 });
 
@@ -178,6 +219,32 @@ describe("mixAssignments (nobody hears themselves)", () => {
     const plan = mixAssignments(["self"], []);
     expect(plan.monitor).toEqual([]);
     expect(plan.master).toEqual(["self"]);
+  });
+
+  test("a shared screen's audio follows its owner through every bus", () => {
+    const keys = ["self", "g1", "screen:self", "screen:g1"];
+    const screenOf = { "screen:self": "self", "screen:g1": "g1" };
+    const plan = mixAssignments(keys, ["g1"], screenOf);
+    // Master (Director's Cut / monitoring source of truth): every voice AND
+    // every shared screen's audio, exactly once.
+    expect([...plan.master].sort()).toEqual(["g1", "screen:g1", "screen:self", "self"]);
+    expect(new Set(plan.master).size).toBe(plan.master.length);
+    // Speakers: remote voices + remote screen audio — never the host's own
+    // mic and never the host's own screen (that would loop the tab back
+    // into its own capture).
+    expect([...plan.monitor].sort()).toEqual(["g1", "screen:g1"]);
+    // Guest g1's stage bus: everyone except g1's mic AND g1's screen audio
+    // (both would echo back at g1 through the stage call).
+    expect([...plan.guests.g1].sort()).toEqual(["screen:self", "self"]);
+  });
+
+  test("a listener sharing a screen: only the screen audio mixes", () => {
+    const keys = ["self", "screen:g2"];
+    const screenOf = { "screen:g2": "g2" };
+    const plan = mixAssignments(keys, ["g2"], screenOf);
+    expect(plan.guests.g2).toEqual(["self"]); // g2 hears the host, not their own tab
+    expect(plan.monitor).toEqual(["screen:g2"]); // the host hears g2's tab
+    expect([...plan.master].sort()).toEqual(["screen:g2", "self"]);
   });
 });
 

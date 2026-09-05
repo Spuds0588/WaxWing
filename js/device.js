@@ -6,7 +6,7 @@
 //   3. The clone is constrained to ~720p/1080p and that *proxy* travels
 //      over WebRTC; the original master track is recorded locally.
 
-import { MASTER_LADDER, PROXY, STORAGE_KEYS } from "./config.js";
+import { MASTER_LADDER, PROXY, SCREEN, STORAGE_KEYS } from "./config.js";
 
 export async function listDevices() {
   const all = await navigator.mediaDevices.enumerateDevices();
@@ -82,6 +82,54 @@ export function makeProxyVideoTrack(masterStream) {
   if (!masterTrack) return null;
   const clone = masterTrack.clone();
   clone.applyConstraints(PROXY.video).catch(() => {});
+  return clone;
+}
+
+// ---- screen sharing ------------------------------------------------------
+
+// getDisplayMedia drives a native picker (tab / window / screen). It is not
+// available everywhere yet — notably iOS Safari — so callers should check
+// screenShareSupported() and hide the control rather than fail at click.
+export function screenShareSupported() {
+  return (
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getDisplayMedia)
+  );
+}
+
+/**
+ * Opens the OS screen/window/tab picker. audio:true offers tab audio when
+ * the user picks a tab that has it (Chrome shows the checkbox); captures of
+ * a full screen or a window simply carry no audio track, which is fine.
+ * Cancels surface as an Error with .cancelled === true (NotAllowedError /
+ * AbortError), so the UI can silently revert instead of alarming.
+ */
+export async function openScreenShare() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: SCREEN.video,
+      audio: true,
+    });
+  } catch (err) {
+    if (err?.name === "NotAllowedError" || err?.name === "AbortError") {
+      const e = new Error("Screen share cancelled.");
+      e.cancelled = true;
+      e.cause = err;
+      throw e;
+    }
+    throw err;
+  }
+  return stream;
+}
+
+// A screen share travels as its own video stream (separate from the camera
+// proxy), downscaled for the link like the camera proxy is.
+export function makeScreenProxyTrack(stream) {
+  const track = stream?.getVideoTracks()[0];
+  if (!track) return null;
+  const clone = track.clone();
+  clone.applyConstraints(SCREEN.proxy).catch(() => {});
   return clone;
 }
 

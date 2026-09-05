@@ -61,6 +61,34 @@ const DIR_STUB = `() => {
   };
 }`;
 
+// getDisplayMedia can't be faked by Playwright, so stub it with a live
+// canvas stream (real captureStream video track, distinct yellow content on
+// a blue field) — everything after acquisition is the real production path:
+// separate media call -> host screen tile -> composer -> broadcast.
+const DISPLAY_STUB = `(() => {
+  navigator.mediaDevices.getDisplayMedia = async () => {
+    const c = document.createElement("canvas");
+    c.width = 640;
+    c.height = 360;
+    const ctx = c.getContext("2d");
+    let frame = 0;
+    const draw = () => {
+      frame++;
+      ctx.fillStyle = "#14324f";
+      ctx.fillRect(0, 0, 640, 360);
+      ctx.fillStyle = "#ffc63d";
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText("SHARED " + frame, 40, 200);
+    };
+    draw();
+    const stream = c.captureStream(12);
+    const t = stream.getVideoTracks()[0];
+    const iv = setInterval(draw, 200);
+    t.addEventListener("ended", () => clearInterval(iv));
+    return stream;
+  };
+})();`;
+
 // Clamp the fake 4K camera to 720p — decoding two 4K feeds headless is brutal.
 const CLAMP_GUM = `(() => {
   const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
@@ -118,6 +146,7 @@ test("host + guest session screens fit the phone end to end", async ({ browser }
     }, SIG);
     await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
     await ctx.addInitScript(CLAMP_GUM);
+    await ctx.addInitScript(DISPLAY_STUB);
   }
 
   try {
@@ -213,6 +242,7 @@ async function newSessionContexts(browser, cb) {
     }, SIG);
     await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
     await ctx.addInitScript(CLAMP_GUM);
+    await ctx.addInitScript(DISPLAY_STUB);
   }
   try {
     await cb(hostCtx, guestCtx);
@@ -347,6 +377,7 @@ test("full house: host + three guests — stage, record, and sync hold up on a p
     }, SIG);
     await ctx.addInitScript(`window.showDirectoryPicker = ${DIR_STUB};`);
     await ctx.addInitScript(CLAMP_GUM);
+    await ctx.addInitScript(DISPLAY_STUB);
     return ctx;
   };
 
@@ -471,4 +502,107 @@ test("full house: host + three guests — stage, record, and sync hold up on a p
     await hostCtx.close().catch(() => {});
     for (const ctx of guestCtxs) await ctx.close().catch(() => {});
   }
+});
+
+test("guest and host screen shares arrive as separate tiles, broadcast, and survive a record round", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const errors = [];
+  await newSessionContexts(browser, async (hostCtx, guestCtx) => {
+    const host = await hostCtx.newPage();
+    const guest = await guestCtx.newPage();
+    for (const p of [host, guest]) {
+      p.on("pageerror", (e) => errors.push(String(e)));
+      p.on("console", (m) => {
+        if (m.type() === "error") errors.push(m.text());
+      });
+    }
+
+    await host.goto("/");
+    await host.locator("#landing .land-hero [data-start]").click();
+    await host.fill("#nameInput", "Sharing Host");
+    await host.click("#btnEnter");
+    await expect(host.locator("#welcomeModal")).toBeHidden();
+    const room = (await host.locator("#roomChipCode").textContent()).trim();
+
+    await guest.goto(`/?room=${room}`);
+    await guest.fill("#nameInput", "Slide Gal");
+    await guest.click("#btnEnter");
+    await expect(guest.locator("#connPill")).toContainText("On air", { timeout: 30_000 });
+
+    // The Share control is available in-session to both roles.
+    await expect(guest.locator("#btnShareScreen")).toBeVisible();
+    await expect(guest.locator("#btnShareScreen")).toHaveText("Share");
+
+    // Guest shares: its own media call, separate from the camera proxy.
+    await guest.click("#btnShareScreen");
+    await expect(guest.locator("#btnShareScreen")).toHaveText("Stop");
+
+    // Host: the guest's screen becomes a dedicated SCREEN tile that decodes.
+    await expect(host.locator("#stage .tile-screen")).toHaveCount(1, { timeout: 30_000 });
+    await expect(host.locator("#stage .tile-screen .tile-name")).toHaveText("Slide Gal");
+    await expect(host.locator("#stage .tile-screen .chip-screen")).toHaveText("SCREEN");
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const v = document.querySelector("#stage .tile-screen video");
+            return v && v.videoWidth > 0 && !v.paused;
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    // Presentation layout: the screen owns the top band, cameras below it.
+    const geo = await host.evaluate(() => {
+      const s = document.querySelector("#stage .tile-screen");
+      const cam = document.querySelector("#stage .tile:not(.tile-screen)");
+      return {
+        sb: s.getBoundingClientRect().bottom,
+        ct: cam.getBoundingClientRect().top,
+      };
+    });
+    expect(geo.sb).toBeLessThanOrEqual(geo.ct + 1);
+
+    // The guest is still on air and the phone screens never overflow.
+    await expect(guest.locator("#connPill")).toContainText("On air");
+    await expectNoOverflow(host);
+    await expectNoOverflow(guest);
+
+    // Stop sharing: the tile leaves the host's stage cleanly.
+    await guest.click("#btnShareScreen");
+    await expect(guest.locator("#btnShareScreen")).toHaveText("Share");
+    await expect(host.locator("#stage .tile-screen")).toHaveCount(0, { timeout: 20_000 });
+
+    // Hosts can share too — straight onto the local stage/composer.
+    await host.click("#btnShareScreen");
+    await expect(host.locator("#btnShareScreen")).toHaveText("Stop");
+    await expect(host.locator("#stage .tile-screen")).toHaveCount(1);
+    await expect(host.locator("#stage .tile-screen .tile-name")).toHaveText("Sharing Host");
+    await expect
+      .poll(
+        async () =>
+          host.evaluate(() => {
+            const v = document.querySelector("#stage .tile-screen video");
+            return v && v.videoWidth > 0 && !v.paused;
+          }),
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    // The guest still receives the broadcast (now including the host share).
+    await expect(guest.locator("#connPill")).toContainText("On air");
+    await expectNoOverflow(guest);
+
+    // A record round with the share live still records and syncs cleanly.
+    await host.click("#btnRecord");
+    await expect(host.locator("#recChip")).toBeVisible();
+    await host.waitForTimeout(2500);
+    await host.click("#btnRecord");
+    await expect(host.locator("#btnSyncClose")).toBeEnabled({ timeout: 90_000 });
+    await host.click("#btnSyncClose");
+
+    await host.click("#btnShareScreen"); // stop the host share
+    await expect(host.locator("#btnShareScreen")).toHaveText("Share");
+    await expect(host.locator("#stage .tile-screen")).toHaveCount(0, { timeout: 20_000 });
+    await expectNoOverflow(host);
+  });
+  expect(errors, `JS errors during screen-share session: ${errors.slice(0, 5).join(" | ")}`).toEqual([]);
 });

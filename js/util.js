@@ -97,6 +97,14 @@ export function coverCrop(outerW, outerH, innerW, innerH) {
   return { dw, dh, dx: (outerW - dw) / 2, dy: (outerH - dh) / 2 };
 }
 
+export function containCrop(outerW, outerH, innerW, innerH) {
+  // object-fit: contain math -> the whole source fits inside, letterboxed.
+  const scale = Math.min(outerW / innerW, outerH / innerH);
+  const dw = innerW * scale;
+  const dh = innerH * scale;
+  return { dw, dh, dx: (outerW - dw) / 2, dy: (outerH - dh) / 2 };
+}
+
 export function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -123,8 +131,15 @@ export function notify(message, kind = "info", ms = 5000) {
     t.append(close);
   }
   toastRoot.append(t);
-  if (kind !== "danger") setTimeout(() => t.classList.add("toast-out"), ms);
-  t.addEventListener("animationend", () => {
-    if (t.classList.contains("toast-out")) t.remove();
-  });
+  if (kind !== "danger") {
+    // .toast-out is a CSS transition, so no animationend ever fires for it.
+    // Remove purely on timers — fade in after `ms`, then out 450ms later.
+    // (An animationend hook would never run, and toasts would linger
+    // invisibly over buttons forever.)
+    let removal = null;
+    removal = setTimeout(() => {
+      t.classList.add("toast-out");
+      removal = setTimeout(() => t.remove(), 450);
+    }, ms);
+  }
 }
