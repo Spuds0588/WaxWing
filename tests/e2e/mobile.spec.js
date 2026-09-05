@@ -132,6 +132,29 @@ test("hero demo storyboard keeps cycling past the join beat", async ({ page }) =
   await expect(hs).toHaveAttribute("data-scene", "share", { timeout: 9000 });
 });
 
+test("demo storyboard still cycles when reduced motion is on (Android Remove animations)", async ({ browser }) => {
+  // Android's "Remove animations" / OS motion settings make Chromium report
+  // prefers-reduced-motion: reduce. A regression pinned the demo to a static
+  // four-person frame and never advanced — the exact "freezes and does not
+  // progress" report. It must still walk the whole journey as jump cuts.
+  const ctx = await browser.newContext({
+    viewport: { width: 412, height: 915 },
+    isMobile: true,
+    hasTouch: true,
+    deviceScaleFactor: 2.6,
+    reducedMotion: "reduce",
+  });
+  const page = await ctx.newPage();
+  await page.goto("/");
+  const hs = page.locator(".hero-stage");
+  await expect(hs).toHaveAttribute("data-scene", "link");
+  await expect(hs).toHaveAttribute("data-scene", "join", { timeout: 9000 });
+  await expect(hs).toHaveAttribute("data-scene", "share", { timeout: 9000 });
+  // The narration toast doubles as a static caption in reduced motion.
+  await expect(page.locator(".hs-toast")).toHaveCSS("opacity", "1");
+  await ctx.close();
+});
+
 test("host funnels from the selling home page into a fitting studio shell", async ({ page }) => {
   await page.goto("/"); // no ?room => host
 

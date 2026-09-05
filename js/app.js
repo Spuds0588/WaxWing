@@ -157,8 +157,9 @@ function fitHeroStage() {
 // The demo stage cycles through the whole WaxWing journey: host gets a
 // magic link -> guests join (incl. mobile) -> screen shares -> the host
 // cuts grid/spotlight/custom layouts -> record -> guest masters stream
-// back -> all masters in the folder. Reduced-motion users get a static
-// full-studio frame instead.
+// back -> all masters in the folder. Reduced-motion users get the same
+// storyboard as discrete scene changes — no sweeping motion or pulsing, but
+// the journey always progresses (never a frozen static frame).
 const HS_DEMO = [
   { scene: "link", ms: 4300, toast: "Your magic link is ready — send it to anyone, no sign-up", count: "1" },
   { scene: "join", ms: 4600, toast: "Guests tap the link and their cameras connect straight to you — even on a phone", count: "4" },
@@ -176,11 +177,6 @@ function startHeroDemo() {
   const toast = stage.querySelector(".hs-toast");
   const lbItems = Array.from(stage.querySelectorAll(".hs-lb-item"));
   const fchips = Array.from(stage.querySelectorAll(".hs-fchip"));
-
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    stage.dataset.scene = "join"; // static full-studio frame
-    return;
-  }
 
   // Single self-rescheduling tick drives the whole storyboard: scene
   // changes come from a timestamped clock (immune to timer throttling and

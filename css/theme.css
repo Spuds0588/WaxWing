@@ -315,9 +315,13 @@
   }
 }
 
-/* Landing hero demo storyboard — reduced-motion guard: the JS engine pins
-   the demo to a static full-studio frame; strip transitions/animations so
-   that frame doesn't half-animate into place and no pulse/blink loops run.
+/* Landing hero demo storyboard — reduced-motion mode: the engine runs the
+   full journey, so every scene change must land as an instant jump cut (no
+   sweeping transitions) and nothing may pulse, blink, or sweep. The toast
+   narration normally auto-fades via animation, so under reduced motion it
+   becomes a static caption that swaps its text each beat. Without these
+   guards the demo used to half-animate and freeze on a static frame on
+   devices with "Remove animations" / reduced motion enabled.
    (Lives here rather than style.css to keep the demo layer together and
    load after the base sheet.) */
 @media (prefers-reduced-motion: reduce) {
@@ -333,5 +337,8 @@
   .hs-rec.is-on i {
     transition: none !important;
     animation: none !important;
+  }
+  .hs-toast.is-on {
+    opacity: 1 !important;
   }
 }
