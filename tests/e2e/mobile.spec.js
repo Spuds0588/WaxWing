@@ -133,6 +133,16 @@ test("host funnels from the selling home page into a fitting studio shell", asyn
   await expect(page.locator(".land-hero")).toContainText("Your browser is the studio");
   await expectNoOverflow(page);
 
+  // The hero demo storyboard ships the whole journey: magic link bar,
+  // screen tiles, layout bar, and the master-collection panel all exist,
+  // and the loop starts on the "link" beat.
+  const hs = page.locator(".hero-stage");
+  await expect(hs).toHaveAttribute("data-scene", "link");
+  await expect(page.locator(".hero-stage .hs-linkbar")).toBeVisible();
+  await expect(page.locator(".hero-stage .hs-screen-a")).toBeAttached();
+  await expect(page.locator(".hero-stage .hs-layoutbar")).toBeAttached();
+  await expect(page.locator(".hero-stage .hs-files .hs-fchip")).toHaveCount(4);
+
   // The primary CTA hands you your first recording-link flow.
   await page.locator("#landing .land-hero [data-start]").click();
   await expect(page.locator("body")).toHaveClass(/mode-app/);

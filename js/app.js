@@ -153,6 +153,98 @@ function fitHeroStage() {
   wrap.style.setProperty("--hs-scale", String(Math.min(1, w / HS_WIDTH)));
 }
 
+// ---- animated hero demo (landing page) ------------------------------
+// The demo stage cycles through the whole WaxWing journey: host gets a
+// magic link -> guests join (incl. mobile) -> screen shares -> the host
+// cuts grid/spotlight/custom layouts -> record -> guest masters stream
+// back -> all masters in the folder. Reduced-motion users get a static
+// full-studio frame instead.
+const HS_DEMO = [
+  { scene: "link", ms: 4300, toast: "Your magic link is ready — send it to anyone, no sign-up", count: "1" },
+  { scene: "join", ms: 4600, toast: "Guests tap the link and their cameras connect straight to you — even on a phone", count: "4" },
+  { scene: "share", ms: 4600, toast: "Maya shares her screen — a live SCREEN tile joins the stage", count: "4" },
+  { scene: "layout", ms: 7200, toast: "You direct the cut — grid, spotlight, or your own custom arrangement", count: "4", layouts: ["grid", "spotlight", "custom"], layoutMs: 2200 },
+  { scene: "record", ms: 5600, toast: "One click records 4 full-quality local masters — your disk is the archive", count: "4" },
+  { scene: "done", ms: 4000, toast: "Stop — every guest master lands in your folder, peer-to-peer. That's the whole show", count: "4" },
+];
+
+function startHeroDemo() {
+  const stage = document.querySelector(".hero-stage");
+  if (!stage) return;
+  const count = stage.querySelector(".hs-count b");
+  const rec = stage.querySelector(".hs-rec");
+  const toast = stage.querySelector(".hs-toast");
+  const lbItems = Array.from(stage.querySelectorAll(".hs-lb-item"));
+  const fchips = Array.from(stage.querySelectorAll(".hs-fchip"));
+
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    stage.dataset.scene = "join"; // static full-studio frame
+    return;
+  }
+
+  let paused = false;
+  let ticket = 0;
+  let idx = 0;
+  const io = new IntersectionObserver((entries) => {
+    paused = !entries[0].isIntersecting;
+  });
+  io.observe(stage);
+
+  // Progress bars + check states for the files panel: recording beat = the
+  // host's file is green locally, guests sweep their P2P transfer bars;
+  // done beat = everything green.
+  function setFiles(phase) {
+    fchips.forEach((chip, i) => {
+      chip.classList.toggle("is-syncing", phase === "record" && i > 0);
+      chip.classList.toggle("is-done", phase === "done" || i === 0);
+      const st = chip.querySelector(".hs-fs");
+      if (phase === "done" || i === 0) st.textContent = "Saved ✓";
+      else st.textContent = "P2P";
+    });
+  }
+
+  function enter(step) {
+    const t = ++ticket;
+    stage.dataset.scene = step.scene;
+    stage.dataset.layout = step.layouts ? step.layouts[0] : "";
+    stage.dataset.rec = step.scene === "record" ? "on" : "";
+    rec.classList.toggle("is-on", step.scene === "record");
+    count.textContent = step.count;
+    if (step.layouts) {
+      lbItems.forEach((it) => it.classList.toggle("is-on", it.dataset.l === step.layouts[0]));
+    }
+    setFiles(step.scene === "record" || step.scene === "done" ? step.scene : null);
+    toast.textContent = step.toast;
+    toast.classList.remove("is-on");
+    void toast.offsetWidth; // restart the auto-fade animation
+    toast.classList.add("is-on");
+
+    if (!step.layouts) return;
+    // The directing beat walks through grid -> spotlight -> custom on its
+    // own cadence before advancing to record.
+    let li = 1;
+    const walk = setInterval(() => {
+      if (t !== ticket) { clearInterval(walk); return; }
+      const layout = step.layouts[li++];
+      if (!layout) { clearInterval(walk); setTimeout(advance, 300); return; }
+      stage.dataset.layout = layout;
+      lbItems.forEach((it) => it.classList.toggle("is-on", it.dataset.l === layout));
+    }, step.layoutMs);
+  }
+
+  function advance() {
+    if (paused) { setTimeout(advance, 300); return; }
+    idx = (idx + 1) % HS_DEMO.length;
+    const step = HS_DEMO[idx];
+    enter(step);
+    const base = step.layouts ? step.layouts.length * step.layoutMs + 400 : step.ms;
+    setTimeout(advance, base);
+  }
+
+  enter(HS_DEMO[0]);
+  setTimeout(advance, HS_DEMO[0].ms);
+}
+
 function boot() {
   const params = new URLSearchParams(location.search);
   S.room = (params.get("room") || "").toUpperCase().trim() || null;
@@ -171,6 +263,7 @@ function boot() {
     btn.addEventListener("click", startHostStudio);
   }
   fitHeroStage();
+  startHeroDemo();
   window.addEventListener("resize", fitHeroStage);
 }
 

@@ -1694,6 +1694,392 @@ body.mode-app .modal-backdrop {
   cursor: default;
 }
 
+/* ---------------- hero demo storyboard ---------------- */
+/* The demo is a fixed 640×360 space; scenes are driven by
+   data-scene (and data-layout for the directing beat) on .hero-stage.
+   Everything animates by CSS transitions on geometry + opacity. */
+.hs-tile,
+.hs-screen {
+  transition:
+    left 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+    top 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.45s ease,
+    border-color 0.4s ease;
+}
+.hs-top,
+.hs-linkbar,
+.hs-layoutbar,
+.hs-files,
+.hs-toast,
+.hs-rec {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+/* Linkbar carries the magic-link beat — gentle attention pulse. */
+.hs-linkbar {
+  border-color: rgba(255, 198, 61, 0.35);
+  animation: hs-pulse 2.6s ease-in-out infinite;
+}
+@keyframes hs-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 198, 61, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 198, 61, 0.1); }
+}
+
+/* SCREEN tiles: fake slide content (deck / graph mock). */
+.hs-screen {
+  overflow: hidden;
+}
+.hs-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 16px;
+  background: #10131c;
+}
+.hs-sl-deck {
+  background:
+    radial-gradient(120% 100% at 100% 0%, rgba(255, 198, 61, 0.1), transparent 60%),
+    #10131c;
+}
+.hs-sl-graph {
+  background:
+    radial-gradient(120% 100% at 0% 100%, rgba(116, 201, 105, 0.12), transparent 60%),
+    #0c1210;
+}
+.hs-sl-rule {
+  width: 46px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.hs-sl-graph .hs-sl-rule { background: rgba(127, 202, 114, 0.9); }
+.hs-sl-title {
+  width: 62%;
+  height: 13px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.24);
+  margin-top: 4px;
+}
+.hs-sl-line {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.hs-sl-line-s { width: 55%; }
+.hs-sl-block {
+  flex: 1;
+  border-radius: 6px;
+  margin-top: 4px;
+  background:
+    linear-gradient(120deg, rgba(255, 198, 61, 0.16), rgba(255, 198, 61, 0.04) 55%),
+    rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.hs-sl-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+.hs-sl-bars i {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, rgba(127, 202, 114, 0.55), rgba(127, 202, 114, 0.12));
+}
+.hs-sl-bars i:nth-child(1) { height: 38%; }
+.hs-sl-bars i:nth-child(2) { height: 62%; }
+.hs-sl-bars i:nth-child(3) { height: 48%; }
+.hs-sl-bars i:nth-child(4) { height: 84%; }
+.hs-sl-bars i:nth-child(5) { height: 58%; }
+.hs-sl-bars i:nth-child(6) { height: 96%; }
+.hs-sc-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hs-sc-chip {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+.hs-dev-chip {
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Layout quick-bar (host directs the cut). */
+.hs-layoutbar {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(8, 7, 5, 0.9);
+  border: 1px solid var(--line);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+.hs-lb-cap {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  padding: 0 3px 0 5px;
+}
+.hs-lb-item {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: default;
+}
+.hs-lb-item.is-on {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+/* Files panel: guest masters streaming to the host's folder. */
+.hs-files {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 306px;
+  height: 42px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(8, 7, 5, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  pointer-events: none;
+}
+.hs-files-title {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.hs-frow {
+  display: flex;
+  gap: 8px;
+}
+.hs-fchip {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+.hs-fn {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+}
+.hs-fbar {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.hs-fbar::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.hs-fs {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+/* Recording beat: guest chips sweep their P2P progress bars. */
+.hs-fchip.is-syncing .hs-fbar::after {
+  animation: hs-progress 2.4s ease-in-out both;
+}
+.hs-fchip.is-syncing:nth-child(2) .hs-fbar::after { animation-delay: 0.3s; }
+.hs-fchip.is-syncing:nth-child(3) .hs-fbar::after { animation-delay: 0.8s; }
+.hs-fchip.is-syncing:nth-child(4) .hs-fbar::after { animation-delay: 1.3s; }
+@keyframes hs-progress {
+  0% { width: 0%; }
+  70% { width: 92%; }
+  85% { width: 86%; }
+  100% { width: 100%; }
+}
+.hs-fchip.is-done .hs-fbar::after { width: 100%; background: var(--ok); }
+.hs-fchip.is-done .hs-fs {
+  color: var(--ok);
+}
+
+/* Toast narration — auto-fades regardless of scene length. */
+.hs-toast {
+  position: absolute;
+  top: 40px;
+  right: 14px;
+  z-index: 5;
+  max-width: 300px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(8, 7, 5, 0.92);
+  border: 1px solid rgba(255, 198, 61, 0.35);
+  border-radius: 999px;
+  padding: 7px 14px;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.8);
+}
+.hs-toast.is-on {
+  animation: hs-toast 3.4s ease both;
+}
+@keyframes hs-toast {
+  0% { opacity: 0; transform: translateY(6px); }
+  8% { opacity: 1; transform: translateY(0); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* REC pill lights up only during the record beat. */
+.hs-rec { opacity: 0; }
+.hs-rec.is-on {
+  opacity: 1;
+  color: var(--rec);
+  border-color: rgba(232, 80, 58, 0.45);
+  background: rgba(232, 80, 58, 0.08);
+}
+.hs-rec.is-on i { animation: hs-blink 1s ease-in-out infinite; }
+@keyframes hs-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ---------- scene geometry ---------- */
+/* link: the host alone with a fresh magic link */
+.hero-stage .hs-g1,
+.hero-stage .hs-g2,
+.hero-stage .hs-g3,
+.hero-stage .hs-screen-a,
+.hero-stage .hs-screen-b {
+  opacity: 0;
+}
+.hero-stage .hs-layoutbar,
+.hero-stage .hs-files { opacity: 0; }
+.hero-stage .hs-host {
+  left: 14px;
+  top: 42px;
+  width: 348px;
+  height: 264px;
+}
+
+/* join: the room fills — four cameras, Ann on mobile */
+.hero-stage[data-scene="join"] .hs-host { left: 14px; top: 42px; width: 302px; height: 124px; }
+.hero-stage[data-scene="join"] .hs-g1 { left: 324px; top: 42px; width: 302px; height: 124px; opacity: 1; }
+.hero-stage[data-scene="join"] .hs-g2 { left: 14px; top: 174px; width: 302px; height: 124px; opacity: 1; }
+.hero-stage[data-scene="join"] .hs-g3 { left: 324px; top: 174px; width: 302px; height: 124px; opacity: 1; }
+
+/* share: a guest's screen owns the top band, cameras drop to a strip */
+.hero-stage[data-scene="share"] .hs-screen-a {
+  left: 14px; top: 42px; width: 612px; height: 190px; opacity: 1;
+}
+.hero-stage[data-scene="share"] .hs-host { left: 14px; top: 240px; width: 147px; height: 66px; }
+.hero-stage[data-scene="share"] .hs-g1 { left: 169px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="share"] .hs-g2 { left: 324px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="share"] .hs-g3 { left: 479px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+
+/* layout: host cuts the cut — grid / spotlight / custom */
+.hero-stage[data-scene="layout"] .hs-layoutbar { opacity: 1; }
+.hero-stage[data-scene="layout"][data-layout="grid"] .hs-screen-a {
+  left: 14px; top: 42px; width: 302px; height: 190px; opacity: 1;
+}
+.hero-stage[data-scene="layout"][data-layout="grid"] .hs-screen-b {
+  left: 324px; top: 42px; width: 302px; height: 190px; opacity: 1;
+}
+.hero-stage[data-scene="layout"][data-layout="grid"] .hs-host { left: 14px; top: 240px; width: 147px; height: 66px; }
+.hero-stage[data-scene="layout"][data-layout="grid"] .hs-g1 { left: 169px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="layout"][data-layout="grid"] .hs-g2 { left: 324px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="layout"][data-layout="grid"] .hs-g3 { left: 479px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="layout"][data-layout="spotlight"] .hs-screen-a {
+  left: 14px; top: 42px; width: 470px; height: 264px; opacity: 1;
+}
+.hero-stage[data-scene="layout"][data-layout="spotlight"] .hs-screen-b {
+  left: 492px; top: 42px; width: 134px; height: 60px; opacity: 1;
+}
+.hero-stage[data-scene="layout"][data-layout="spotlight"] .hs-host { left: 492px; top: 108px; width: 134px; height: 60px; }
+.hero-stage[data-scene="layout"][data-layout="spotlight"] .hs-g1 { opacity: 0; }
+.hero-stage[data-scene="layout"][data-layout="spotlight"] .hs-g2 { left: 492px; top: 174px; width: 134px; height: 60px; opacity: 1; }
+.hero-stage[data-scene="layout"][data-layout="spotlight"] .hs-g3 { left: 492px; top: 240px; width: 134px; height: 60px; opacity: 1; }
+.hero-stage[data-scene="layout"][data-layout="custom"] .hs-screen-a {
+  left: 14px; top: 42px; width: 612px; height: 226px; opacity: 1;
+}
+.hero-stage[data-scene="layout"][data-layout="custom"] .hs-screen-b {
+  left: 320px; top: 250px; width: 112px; height: 62px; opacity: 1;
+}
+.hero-stage[data-scene="layout"][data-layout="custom"] .hs-host {
+  left: 440px; top: 230px; width: 186px; height: 82px;
+  border-color: rgba(255, 198, 61, 0.45);
+  box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.7);
+}
+.hero-stage[data-scene="layout"][data-layout="custom"] .hs-g1,
+.hero-stage[data-scene="layout"][data-layout="custom"] .hs-g2,
+.hero-stage[data-scene="layout"][data-layout="custom"] .hs-g3 { opacity: 0; }
+
+/* record: masters are written locally + guest masters stream in */
+.hero-stage[data-scene="record"] .hs-screen-a {
+  left: 14px; top: 42px; width: 302px; height: 190px; opacity: 1;
+}
+.hero-stage[data-scene="record"] .hs-screen-b {
+  left: 324px; top: 42px; width: 302px; height: 190px; opacity: 1;
+}
+.hero-stage[data-scene="record"] .hs-host { left: 14px; top: 240px; width: 147px; height: 66px; }
+.hero-stage[data-scene="record"] .hs-g1 { left: 169px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="record"] .hs-g2 { left: 324px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="record"] .hs-g3 { left: 479px; top: 240px; width: 147px; height: 66px; opacity: 1; }
+.hero-stage[data-scene="record"] .hs-files { opacity: 1; }
+.hero-stage[data-scene="record"] .hs-linkbar { opacity: 0; }
+.hero-stage[data-scene="record"] .hs-layoutbar { opacity: 0; }
+
+/* done: every master is in the host's folder */
+.hero-stage[data-scene="done"] .hs-screen-a,
+.hero-stage[data-scene="done"] .hs-screen-b {
+  opacity: 1;
+  filter: saturate(0.65);
+}
+.hero-stage[data-scene="done"] .hs-files { opacity: 1; }
+.hero-stage[data-scene="done"] .hs-linkbar,
+.hero-stage[data-scene="done"] .hs-layoutbar { opacity: 0; }
+
 /* sections */
 .land-band,
 .land-steps,
